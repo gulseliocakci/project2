@@ -26,8 +26,8 @@ typedef struct node {
 typedef struct list {
     Node *head;
     Node *tail;
-    int number_of_elements; /*TODO: make semaphore*/
-    int capacity;           /*TODO make semaphore*/
+    int number_of_elements; 
+    int capacity;          
     int datasize; /*only data[] size in the node, e.g. sizeof(Survivor)*/
     int nodesize;     /*this includes next, prev pointer sizes*/
     char *startaddress;
@@ -35,7 +35,9 @@ typedef struct list {
     Node *lastprocessed;
     Node *free_list; /* Track freed nodes */
 
-    pthread_mutex_t lock; /*controls all access to the list*/
+    pthread_mutex_t lock;         /* controls all access to the list */
+    sem_t empty_slots;            /* semaphore for empty slots in the list */
+    sem_t filled_slots;           /* semaphore for filled slots in the list */
     
     /*ops on the list*/
     Node *(*add)(struct list *list, void *data);
