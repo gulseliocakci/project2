@@ -63,25 +63,25 @@ void draw_cell(int x, int y, SDL_Color color) {
     SDL_RenderFillRect(renderer, &rect);
 }
 
+const SDL_Color YELLOW = {255, 255, 0, 255};  // Atanmış survivor
+
 void draw_drones() {
     for (int i = 0; i < num_drones; i++) {
         pthread_mutex_lock(&drone_fleet[i].lock);
-        SDL_Color color =
-            (drone_fleet[i].status == IDLE) ? BLUE : GREEN;
-        draw_cell(drone_fleet[i].coord.x, drone_fleet[i].coord.y,
-                  color);
+
+        SDL_Color color = (drone_fleet[i].status == IDLE) ? BLUE : GREEN;
+        draw_cell(drone_fleet[i].coord.x, drone_fleet[i].coord.y, color);
 
         // Draw mission line if on mission
         if (drone_fleet[i].status == ON_MISSION) {
-            SDL_SetRenderDrawColor(renderer, GREEN.r, GREEN.g,
-                                   GREEN.b, GREEN.a);
-            SDL_RenderDrawLine(
-                renderer,
+            SDL_SetRenderDrawColor(renderer, GREEN.r, GREEN.g, GREEN.b, GREEN.a);
+            SDL_RenderDrawLine(renderer,
                 drone_fleet[i].coord.y * CELL_SIZE + CELL_SIZE / 2,
                 drone_fleet[i].coord.x * CELL_SIZE + CELL_SIZE / 2,
                 drone_fleet[i].target.y * CELL_SIZE + CELL_SIZE / 2,
                 drone_fleet[i].target.x * CELL_SIZE + CELL_SIZE / 2);
         }
+
         pthread_mutex_unlock(&drone_fleet[i].lock);
     }
 }
@@ -90,13 +90,34 @@ void draw_survivors() {
     for (int i = 0; i < map.height; i++) {
         for (int j = 0; j < map.width; j++) {
             pthread_mutex_lock(&map.cells[i][j].survivors->lock);
+
             if (map.cells[i][j].survivors->number_of_elements > 0) {
-                draw_cell(i, j, RED);
+                int assigned = 0;
+
+                // Check if any drone has this cell as its target
+                for (int k = 0; k < num_drones; k++) {
+                    pthread_mutex_lock(&drone_fleet[k].lock);
+                    if (drone_fleet[k].status == ON_MISSION &&
+                        drone_fleet[k].target.x == i &&
+                        drone_fleet[k].target.y == j) {
+                        assigned = 1;
+                    }
+                    pthread_mutex_unlock(&drone_fleet[k].lock);
+                    if (assigned) break;
+                }
+
+                if (assigned) {
+                    draw_cell(i, j, YELLOW);  // Survivor is assigned
+                } else {
+                    draw_cell(i, j, RED);     // Waiting for help
+                }
             }
+
             pthread_mutex_unlock(&map.cells[i][j].survivors->lock);
         }
     }
 }
+
 
 void draw_grid() {
     SDL_SetRenderDrawColor(renderer, WHITE.r, WHITE.g, WHITE.b,
