@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <pthread.h>
+
 void assign_mission(Drone *drone, Coord target) {
     pthread_mutex_lock(&drone->lock);
     drone->target = target;
@@ -13,7 +15,8 @@ void assign_mission(Drone *drone, Coord target) {
 Drone *find_closest_idle_drone(Coord target) {
     Drone *closest = NULL;
     int min_distance = INT_MAX;
-    pthread_mutex_lock(&drones->lock);  // List mutex
+    pthread_mutex_lock(&drones->lock);  // Lock for drones list
+
     Node *node = drones->head;
     while (node != NULL) {
         Drone *d = (Drone *)node->data;
@@ -27,53 +30,47 @@ Drone *find_closest_idle_drone(Coord target) {
         }
         node = node->next;
     }
-    pthread_mutex_unlock(&drones->lock);  // List mutex
+
+    pthread_mutex_unlock(&drones->lock);  // Unlock for drones list
     return closest;
 }
 
 void *ai_controller(void *arg) {
     while (1) {
-        // TODO change the lock and unlock location to avoid deadlock
-
-        pthread_mutex_lock(&survivors->lock);  // List mutex
         Survivor *s = NULL;
-        if (s = survivors->peek(survivors)) {  
+
+        // Lock the survivors list first, then proceed with fetching a survivor
+        pthread_mutex_lock(&survivors->lock);  // Lock for survivors list
+
+        s = survivors->peek(survivors);
+        if (s) {
+            // We only need the survivor list locked when accessing the list itself
+            pthread_mutex_unlock(&survivors->lock);  // Unlock survivors list immediately after peek
+
+            // Now, find the closest idle drone (drones list locked inside this function)
             Drone *closest = find_closest_idle_drone(s->coord);
             if (closest) {
-                assign_mission(closest, s->coord); // Uses drone->lock
-                printf("Drone %d assigned to survivor at (%d, %d)\n",
-                       closest->id, s->coord.x, s->coord.y);
+                // Lock the drone list to assign the mission and update status
+                assign_mission(closest, s->coord);  // Drone lock happens inside this function
 
+                printf("Drone %d assigned to survivor at (%d, %d)\n", closest->id, s->coord.x, s->coord.y);
 
-                // Remove from global list: make sure to use
-                // correct removedata or removenode
-                survivors->removedata(survivors,s);  
-                // TODO: assuming it is helped
-                s->status = 1;  // Mark as helped
-                s->helped_time = s->discovery_time;  
+                // Remove from the global survivor list
+                pthread_mutex_lock(&survivors->lock);  // Lock again when modifying survivor list
+                survivors->removedata(survivors, s);
+                pthread_mutex_unlock(&survivors->lock);  // Unlock after modification
 
-                // // TODO: you should remove it when the drone
-                // reaches the survivor
-                // // Remove from map cell's survivor list
-                // pthread_mutex_lock(&helpedsurvivors->lock); // List
-                // mutex helpedsurvivors->add(helpedsurvivors, s); //
-                // Add to helped list
-                // pthread_mutex_unlock(&helpedsurvivors->lock); //
-                // List mutex
+                // Mark as helped
+                s->status = 1;  // Mark survivor as helped
+                s->helped_time = s->discovery_time;
 
-                printf("Survivor %s being helped by Drone %d\n",
-                       s->info, closest->id);
+                printf("Survivor %s being helped by Drone %d\n", s->info, closest->id);
             }
+        } else {
+            pthread_mutex_unlock(&survivors->lock);  // Unlock if no survivor is available
         }
-        pthread_mutex_unlock(
-            &survivors->lock);  // TODO change its location
 
-        // // Remove from map cell (if needed)
-        // pthread_mutex_lock(&map.cells[s.coord.x][s.coord.y].survivors->lock);
-        // map.cells[s.coord.x][s.coord.y].survivors->removedata(
-        //     map.cells[s.coord.x][s.coord.y].survivors, &s);
-        // pthread_mutex_unlock(&map.cells[s.coord.x][s.coord.y].survivors->lock);
-        sleep(1);
+        sleep(1);  // Pause before checking for the next survivor
     }
     return NULL;
 }
