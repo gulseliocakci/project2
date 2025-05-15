@@ -1,27 +1,54 @@
 #include <pthread.h>
-#include "headers/drone_manager.h"  // Sunucu tarafı drone yönetimi
-#include "headers/client_viewer.h" // İstemci tarafı görselleştirme
 #include <stdio.h>
 #include <unistd.h>
+#include "headers/ai.h"
+#include "headers/view.h"
+#include "headers/map.h"
+
+// Görselleştirme işlevi (view.c'den)
+void *start_visualization(void *arg) {
+    if (init_sdl_window() != 0) {
+        fprintf(stderr, "Görselleştirme başlatılamadı.\n");
+        return NULL;
+    }
+
+    while (!quit_all()) {
+        draw_map();
+        draw_drones();
+        draw_survivors();
+        SDL_Delay(100); // 100ms gecikme
+    }
+
+    return NULL;
+}
 
 int main() {
     // Sunucu portu
     int port = 8080;
 
-    // Görselleştirme için bir iş parçacığı oluşturuluyor
-    pthread_t viewer_thread;
+    // Haritayı başlat
+    init_map(20, 20); // Örnek boyutlar: 20x20
 
-    // Görselleştirme modülünü ayrı bir iş parçacığında başlat
-    if (pthread_create(&viewer_thread, NULL, (void*)start_client_viewer, NULL) != 0) {
+    // Görselleştirme iş parçacığı oluştur
+    pthread_t visualization_thread;
+    if (pthread_create(&visualization_thread, NULL, start_visualization, NULL) != 0) {
         fprintf(stderr, "Görselleştirme iş parçacığı başlatılamadı.\n");
         return 1;
     }
 
-    // Drone sunucusunu başlat (Phase 2'ye uygun şekilde)
-    start_drone_server(port);
+    // Yapay zeka kontrol iş parçacığı oluştur
+    pthread_t ai_thread;
+    if (pthread_create(&ai_thread, NULL, ai_controller, NULL) != 0) {
+        fprintf(stderr, "AI iş parçacığı başlatılamadı.\n");
+        return 1;
+    }
 
-    // Görselleştirme iş parçacığının tamamlanmasını bekle (isteğe bağlı)
-    pthread_join(viewer_thread, NULL);
+    // İş parçacıklarının tamamlanmasını bekle
+    pthread_join(visualization_thread, NULL);
+    pthread_join(ai_thread, NULL);
+
+    // Haritayı serbest bırak
+    freemap();
 
     return 0;
 }
