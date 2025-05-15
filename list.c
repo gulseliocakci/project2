@@ -240,14 +240,17 @@
   * @brief Destroys the list and frees all allocated memory.
   */
  void destroy(List *list) {
-     pthread_mutex_destroy(&list->lock);
-     sem_destroy(&list->empty_slots);
-     sem_destroy(&list->filled_slots);
- 
-     free(list->startaddress);
-     memset(list, 0, sizeof(List));
-     free(list);
- }
+    pthread_mutex_destroy(&list->lock);
+    sem_destroy(&list->empty_slots);
+    sem_destroy(&list->filled_slots);
+
+    free(list->startaddress);
+
+    // Remove memset to avoid redundant clearing
+    // memset(list, 0, sizeof(List)); 
+
+    free(list);
+}
  
  /**
   * @brief Prints list from head to tail.
