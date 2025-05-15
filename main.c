@@ -1,26 +1,27 @@
+#include <pthread.h>
+#include "headers/drone_manager.h"  // Sunucu tarafı drone yönetimi
+#include "headers/client_viewer.h" // İstemci tarafı görselleştirme
 #include <stdio.h>
-#include "headers/drone.h"
-#include "headers/list.h"
-#include "headers/view.h"
 #include <unistd.h>
 
 int main() {
-    // SDL Penceresini başlat
-    if (init_sdl_window() != 0) {
-        fprintf(stderr, "SDL başlatılamadı.\n");
+    // Sunucu portu
+    int port = 8080;
+
+    // Görselleştirme için bir iş parçacığı oluşturuluyor
+    pthread_t viewer_thread;
+
+    // Görselleştirme modülünü ayrı bir iş parçacığında başlat
+    if (pthread_create(&viewer_thread, NULL, (void*)start_client_viewer, NULL) != 0) {
+        fprintf(stderr, "Görselleştirme iş parçacığı başlatılamadı.\n");
         return 1;
     }
 
-    // Drone'ları başlat
-    initialize_drones();
+    // Drone sunucusunu başlat (Phase 2'ye uygun şekilde)
+    start_drone_server(port);
 
-    // Ana döngü
-    while (!check_events()) {
-        draw_map();
-        sleep(1); // Simülasyon hızı
-    }
+    // Görselleştirme iş parçacığının tamamlanmasını bekle (isteğe bağlı)
+    pthread_join(viewer_thread, NULL);
 
-    // Temizlik işlemleri
-    quit_all();
     return 0;
 }
