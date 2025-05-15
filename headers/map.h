@@ -17,6 +17,7 @@ typedef struct map {
 
 // Global map instance (extern)
 extern Map map;
+extern List *drones; // Eklenen extern tanımı
 
 // Functions
 void init_map(int height, int width);
