@@ -6,6 +6,9 @@
 // Global map instance (defined here, declared extern in map.h)
 Map map;
 
+// Global değişkenler
+List *drones = NULL; // Drone listesinin başlangıç noktası
+
 void init_map(int height, int width) {
     map.height = height;
     map.width = width;
