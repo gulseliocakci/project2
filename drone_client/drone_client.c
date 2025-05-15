@@ -1,65 +1,64 @@
-/* example drone_client.c 
-* This is a simple drone client that connects to a server and sends its status
-* while receiving navigation commands.
-* You should separate the client implementation from server.
-*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <pthread.h>
+
+// JSON library (e.g., json-c) for JSON parsing
 #include <json-c/json.h>
-#include "map.h" // Shared structures like Map, Coord
 
-void start_drone_client(const char* server_ip, int port, const char* drone_id) {
-    int sock;
-    struct sockaddr_in server_addr;
-    char buffer[1024];
+#define SERVER_IP "127.0.0.1"
+#define SERVER_PORT 8080
 
-    // Create socket
-    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+void send_status_update(int socket_fd, const char* drone_id, const char* status, int x, int y) {
+    struct json_object *json_obj = json_object_new_object();
+    json_object_object_add(json_obj, "drone_id", json_object_new_string(drone_id));
+    json_object_object_add(json_obj, "status", json_object_new_string(status));
+    
+    struct json_object *location = json_object_new_array();
+    json_object_array_add(location, json_object_new_int(x));
+    json_object_array_add(location, json_object_new_int(y));
+    json_object_object_add(json_obj, "location", location);
+
+    const char *json_str = json_object_to_json_string(json_obj);
+    send(socket_fd, json_str, strlen(json_str), 0);
+
+    json_object_put(json_obj); // Free JSON object
+}
+
+void* drone_client_thread(void* arg) {
+    int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (socket_fd < 0) {
         perror("Socket creation failed");
-        exit(EXIT_FAILURE);
+        return NULL;
     }
 
+    struct sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(port);
+    server_addr.sin_port = htons(SERVER_PORT);
+    inet_pton(AF_INET, SERVER_IP, &server_addr.sin_addr);
 
-    if (inet_pton(AF_INET, server_ip, &server_addr.sin_addr) <= 0) {
-        perror("Invalid address");
-        exit(EXIT_FAILURE);
+    if (connect(socket_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+        perror("Connection to server failed");
+        close(socket_fd);
+        return NULL;
     }
 
-    // Connect to server
-    if (connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-        perror("Connection failed");
-        exit(EXIT_FAILURE);
-    }
+    printf("Connected to server as drone client.\n");
 
-    printf("Connected to server.\n");
+    // Example: Sending status updates
+    send_status_update(socket_fd, "D1", "idle", 10, 20);
 
-    while (1) {
-        // Send status update
-        struct json_object* json = json_object_new_object();
-        json_object_object_add(json, "drone_id", json_object_new_string(drone_id));
-        json_object_object_add(json, "status", json_object_new_string("idle"));
-        struct json_object* location = json_object_new_array();
-        json_object_array_add(location, json_object_new_int(rand() % 100));
-        json_object_array_add(location, json_object_new_int(rand() % 100));
-        json_object_object_add(json, "location", location);
-        snprintf(buffer, sizeof(buffer), "%s", json_object_to_json_string(json));
-        send(sock, buffer, strlen(buffer), 0);
+    // Close connection
+    close(socket_fd);
+    return NULL;
+}
 
-        // Receive mission assignment
-        memset(buffer, 0, sizeof(buffer));
-        int bytes_read = read(sock, buffer, sizeof(buffer));
-        if (bytes_read > 0) {
-            printf("Mission received: %s\n", buffer);
-        }
+int main() {
+    pthread_t thread_id;
+    pthread_create(&thread_id, NULL, drone_client_thread, NULL);
+    pthread_join(thread_id, NULL);
 
-        json_object_put(json);
-        sleep(5); // Send updates every 5 seconds
-    }
-
-    close(sock);
+    return 0;
 }
