@@ -3,30 +3,63 @@
 * while receiving navigation commands.
 * You should separate the client implementation from server.
 */
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 #include <stdio.h>
-#include <unistd.h>
 #include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <json-c/json.h>
+#include "map.h" // Shared structures like Map, Coord
 
-int main() {
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
-    struct sockaddr_in server_addr = {.sin_family = AF_INET,
-                                      .sin_port = htons(8080),
-                                      .sin_addr.s_addr = inet_addr("127.0.0.1")};
-    connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr));
-    
+void start_drone_client(const char* server_ip, int port, const char* drone_id) {
+    int sock;
+    struct sockaddr_in server_addr;
+    char buffer[1024];
+
+    // Create socket
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        perror("Socket creation failed");
+        exit(EXIT_FAILURE);
+    }
+
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(port);
+
+    if (inet_pton(AF_INET, server_ip, &server_addr.sin_addr) <= 0) {
+        perror("Invalid address");
+        exit(EXIT_FAILURE);
+    }
+
+    // Connect to server
+    if (connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+        perror("Connection failed");
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Connected to server.\n");
+
     while (1) {
         // Send status update
-        DroneStatus status = {.x = current_x, .y = current_y, .idle = 1};
-        send(sock, &status, sizeof(status), 0);
-        
-        // Receive mission
-        Coord target;
-        recv(sock, &target, sizeof(target), 0);
-        navigate_to_target(target);
-        
-        sleep(1);
+        struct json_object* json = json_object_new_object();
+        json_object_object_add(json, "drone_id", json_object_new_string(drone_id));
+        json_object_object_add(json, "status", json_object_new_string("idle"));
+        struct json_object* location = json_object_new_array();
+        json_object_array_add(location, json_object_new_int(rand() % 100));
+        json_object_array_add(location, json_object_new_int(rand() % 100));
+        json_object_object_add(json, "location", location);
+        snprintf(buffer, sizeof(buffer), "%s", json_object_to_json_string(json));
+        send(sock, buffer, strlen(buffer), 0);
+
+        // Receive mission assignment
+        memset(buffer, 0, sizeof(buffer));
+        int bytes_read = read(sock, buffer, sizeof(buffer));
+        if (bytes_read > 0) {
+            printf("Mission received: %s\n", buffer);
+        }
+
+        json_object_put(json);
+        sleep(5); // Send updates every 5 seconds
     }
+
+    close(sock);
 }
