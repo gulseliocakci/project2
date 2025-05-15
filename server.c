@@ -4,8 +4,10 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <json-c/json.h>
+#include <time.h>
 #include "server.h" // Server-specific header file
+
+#define TIMEOUT_THRESHOLD 10 // 10 seconds timeout
 
 // Global drone list and mutex for thread safety
 pthread_mutex_t drones_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -16,92 +18,101 @@ int drone_count = 0;
 void* handle_drone(void* arg) {
     int drone_fd = *(int*)arg;
     char buffer[1024];
+    time_t last_message_time = time(NULL);
 
     while (1) {
         memset(buffer, 0, sizeof(buffer));
         int bytes_read = read(drone_fd, buffer, sizeof(buffer));
+
         if (bytes_read <= 0) {
-            printf("Drone disconnected.\n");
+            printf("Drone disconnected. Closing connection.\n");
             close(drone_fd);
+
+            // Mark drone as disconnected
+            pthread_mutex_lock(&drones_lock);
+            for (int i = 0; i < drone_count; i++) {
+                if (drones[i].drone_fd == drone_fd) {
+                    drones[i].status = DISCONNECTED;
+                    handle_disconnected_drone(drones[i].id); // Reassign missions
+                    break;
+                }
+            }
+            pthread_mutex_unlock(&drones_lock);
             return NULL;
         }
 
+        last_message_time = time(NULL); // Update last message time
         printf("Received: %s\n", buffer);
 
-        // Parse JSON data
-        struct json_object* parsed_json = json_tokener_parse(buffer);
-        struct json_object* drone_id;
-        struct json_object* status;
-        struct json_object* location;
-
-        json_object_object_get_ex(parsed_json, "drone_id", &drone_id);
-        json_object_object_get_ex(parsed_json, "status", &status);
-        json_object_object_get_ex(parsed_json, "location", &location);
-
-        pthread_mutex_lock(&drones_lock);
-        for (int i = 0; i < drone_count; i++) {
-            if (strcmp(drones[i].drone_id, json_object_get_string(drone_id)) == 0) {
-                strcpy(drones[i].status, json_object_get_string(status));
-                drones[i].location.x = json_object_get_int(json_object_array_get_idx(location, 0));
-                drones[i].location.y = json_object_get_int(json_object_array_get_idx(location, 1));
-                break;
-            }
-        }
-        pthread_mutex_unlock(&drones_lock);
-        json_object_put(parsed_json);
+        // Simulate message processing delay
+        usleep(100000);
     }
-
-    return NULL;
 }
 
-// Function to start the server
-void start_drone_server(int port) {
-    int server_fd, drone_fd;
-    struct sockaddr_in server_addr, client_addr;
-    socklen_t addr_len = sizeof(client_addr);
+// Function to handle disconnected drones
+void handle_disconnected_drone(int disconnected_drone_id) {
+    printf("Handling disconnected drone: %d\n", disconnected_drone_id);
 
-    // Create the socket
-    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+    pthread_mutex_lock(&drones_lock);
+    for (int i = 0; i < mission_list_size; i++) {
+        if (mission_list[i].assigned_drone_id == disconnected_drone_id) {
+            // Reassign mission
+            for (int j = 0; j < drone_count; j++) {
+                if (drones[j].status == IDLE) {
+                    mission_list[i].assigned_drone_id = drones[j].id;
+                    drones[j].status = ON_MISSION;
+                    printf("Mission reassigned to Drone %d\n", drones[j].id);
+                    break;
+                }
+            }
+        }
+    }
+    pthread_mutex_unlock(&drones_lock);
+}
+
+// Main server function
+int main() {
+    int server_socket;
+    struct sockaddr_in server_addr;
+
+    server_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_socket == 0) {
         perror("Socket creation failed");
         exit(EXIT_FAILURE);
     }
 
-    // Bind the socket to the port
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(port);
+    server_addr.sin_port = htons(8080);
 
-    if (bind(server_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-        perror("Socket bind failed");
+    if (bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+        perror("Bind failed");
         exit(EXIT_FAILURE);
     }
 
-    // Start listening for connections
-    if (listen(server_fd, 10) < 0) {
+    if (listen(server_socket, 50) < 0) {
         perror("Listen failed");
         exit(EXIT_FAILURE);
     }
 
-    printf("Server started on port %d\n", port);
+    printf("Server listening on port 8080...\n");
 
-    // Accept incoming connections
     while (1) {
-        if ((drone_fd = accept(server_fd, (struct sockaddr*)&client_addr, &addr_len)) < 0) {
+        struct sockaddr_in client_addr;
+        socklen_t client_len = sizeof(client_addr);
+        int* client_socket = malloc(sizeof(int));
+        *client_socket = accept(server_socket, (struct sockaddr*)&client_addr, &client_len);
+
+        if (*client_socket < 0) {
             perror("Accept failed");
+            free(client_socket);
             continue;
         }
 
-        printf("Drone connected.\n");
-
-        // Add the drone to the global list
-        pthread_mutex_lock(&drones_lock);
-        Drone new_drone = { .drone_fd = drone_fd };
-        drones[drone_count++] = new_drone;
-        pthread_mutex_unlock(&drones_lock);
-
-        // Create a new thread to handle the drone
         pthread_t thread_id;
-        pthread_create(&thread_id, NULL, handle_drone, (void*)&drone_fd);
+        pthread_create(&thread_id, NULL, handle_drone, (void*)client_socket);
         pthread_detach(thread_id);
     }
+
+    return 0;
 }
