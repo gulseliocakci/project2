@@ -8,14 +8,54 @@
 #include "headers/server.h"
 #include "headers/mission.h"
 #include "headers/drone.h"
+#include "headers/map.h"
+#include "headers/list.h"
 
-#define TIMEOUT_THRESHOLD 10 // 10 seconds timeout
+#define TIMEOUT_THRESHOLD 10 // 10 saniyelik timeout
+#define MAX_MISSED_HEARTBEATS 3 // Maksimum izin verilen kaçırılan heartbeat sayısı
 
 Mission mission_list[MAX_MISSIONS];
 int mission_list_size = 0;
 
+Map map = {100, 100, NULL}; // Varsayılan olarak 100x100 boyutunda bir harita
 List *drones = NULL; // Drone listesi
 pthread_mutex_t drones_lock = PTHREAD_MUTEX_INITIALIZER;
+
+typedef struct {
+    int missed_heartbeats;
+    time_t last_heartbeat_time;
+} DroneHeartbeatStatus;
+
+DroneHeartbeatStatus heartbeat_status[MAX_DRONES];
+
+void handle_heartbeat(int drone_id) {
+    pthread_mutex_lock(&drones_lock);
+    heartbeat_status[drone_id].missed_heartbeats = 0;
+    heartbeat_status[drone_id].last_heartbeat_time = time(NULL);
+    printf("Heartbeat received from Drone %d\n", drone_id);
+    pthread_mutex_unlock(&drones_lock);
+}
+
+void check_drone_timeouts() {
+    time_t current_time = time(NULL);
+    pthread_mutex_lock(&drones_lock);
+    for (int i = 0; i < MAX_DRONES; i++) {
+        if (heartbeat_status[i].missed_heartbeats >= MAX_MISSED_HEARTBEATS) {
+            printf("Drone %d marked as disconnected due to missed heartbeats.\n", i);
+            handle_disconnected_drone(i);
+        } else if (current_time - heartbeat_status[i].last_heartbeat_time > TIMEOUT_THRESHOLD) {
+            heartbeat_status[i].missed_heartbeats++;
+        }
+    }
+    pthread_mutex_unlock(&drones_lock);
+}
+
+void* monitor_heartbeats(void* arg) {
+    while (1) {
+        check_drone_timeouts();
+        sleep(1); // Her saniye kontrol et
+    }
+}
 
 void* handle_drone(void* arg) {
     int drone_fd = *(int*)arg;
@@ -78,6 +118,9 @@ void handle_disconnected_drone(int disconnected_drone_id) {
 int main() {
     drones = create_list(sizeof(Drone), MAX_DRONES);
 
+    pthread_t heartbeat_thread;
+    pthread_create(&heartbeat_thread, NULL, monitor_heartbeats, NULL);
+
     int server_socket;
     struct sockaddr_in server_addr;
 
@@ -120,5 +163,6 @@ int main() {
         pthread_detach(thread_id);
     }
 
+    pthread_join(heartbeat_thread, NULL);
     return 0;
 }
