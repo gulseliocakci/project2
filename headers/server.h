@@ -2,18 +2,12 @@
 #define SERVER_H
 
 #include "map.h" // Shared structures like Coord
+#include "drone.h" // Drone yapısı burada tanımlanmıştır
 
 #define MAX_DRONES 100
-void handle_disconnected_drone(int disconnected_drone_id);
-// Drone structure definition
-typedef struct {
-    int drone_fd;
-    char drone_id[16];
-    char status[16];
-    Coord location;
-} Drone;
 
 // Function declarations
+void handle_disconnected_drone(int disconnected_drone_id);
 void* handle_drone(void* arg);
 void start_drone_server(int port);
 

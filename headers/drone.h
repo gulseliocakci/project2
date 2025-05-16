@@ -13,21 +13,20 @@ typedef enum {
 } DroneStatus;
 
 typedef struct drone {
-    int id;
-    pthread_t thread_id;
-    int status;             // IDLE, ON_MISSION, DISCONNECTED
-    Coord coord;
-    Coord target;
-    DroneStatus status; // Drone'un durumu (IDLE, ON_MISSION, DISCONNECTED)
-    struct tm last_update;
-    pthread_mutex_t lock;   // Per-drone mutex
-    pthread_cond_t mission_cond; // <- Görev beklemek için condition variable
+    int id;                     // Drone ID
+    int drone_fd;               // Drone'un socket bağlantısı
+    DroneStatus status;         // Drone'un durumu (IDLE, ON_MISSION, DISCONNECTED)
+    Coord coord;                // Mevcut konum
+    Coord target;               // Hedef konum
+    struct tm last_update;      // Son güncelleme zamanı
+    pthread_mutex_t lock;       // Drone için mutex
+    pthread_cond_t mission_cond;// Görev beklemek için condition variable
 } Drone;
 
 // Global drone list (extern)
-extern List *drones;
-extern Drone *drone_fleet; // Array of drones
-extern int num_drones;    // Number of drones in the fleet
+extern List *drones;        // Drone'ların bağlı olduğu liste
+extern Drone *drone_fleet;  // Drone dizisi
+extern int num_drones;      // Aktif drone sayısı
 
 // Functions
 void initialize_drones();

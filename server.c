@@ -5,28 +5,21 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <time.h>
-#include "headers/server.h" // Server-specific header file
+#include "headers/server.h"
 #include "headers/mission.h"
+#include "headers/drone.h"
+
 #define TIMEOUT_THRESHOLD 10 // 10 seconds timeout
-#include "headers/map.h" // Düzgün tanımlamalar için map.h dahil 
 
-Mission mission_list[MAX_MISSIONS]; // Görev listesini tanımla
-int mission_list_size = 0;          // Görev listesi başlangıç boyutu
-/*
-Drone drones[MAX_DRONES]; // Drone dizisini tanımlıyoruz
-int drone_count = 0;      // Aktif drone sayısını sıfırla
-*/
-List *drones = NULL;
-int drone_count = 0; 
+Mission mission_list[MAX_MISSIONS];
+int mission_list_size = 0;
 
-// Global drone list and mutex for thread safety
+List *drones = NULL; // Drone listesi
 pthread_mutex_t drones_lock = PTHREAD_MUTEX_INITIALIZER;
-Drone drones[MAX_DRONES];
-int drone_count = 0;
 
-// Function to handle communication with a single drone
 void* handle_drone(void* arg) {
     int drone_fd = *(int*)arg;
+    free(arg);
     char buffer[1024];
     time_t last_message_time = time(NULL);
 
@@ -38,50 +31,53 @@ void* handle_drone(void* arg) {
             printf("Drone disconnected. Closing connection.\n");
             close(drone_fd);
 
-            // Mark drone as disconnected
             pthread_mutex_lock(&drones_lock);
-            for (int i = 0; i < drone_count; i++) {
-                if (drones[i].drone_fd == drone_fd) {
-                    drones[i].status = DISCONNECTED;
-                    handle_disconnected_drone(drones[i].id); // Reassign missions
+            Node *node = drones->head;
+            while (node != NULL) {
+                Drone *drone = (Drone *)node->data;
+                if (drone->drone_fd == drone_fd) {
+                    drone->status = DISCONNECTED;
+                    handle_disconnected_drone(drone->id);
                     break;
                 }
+                node = node->next;
             }
             pthread_mutex_unlock(&drones_lock);
             return NULL;
         }
 
-        last_message_time = time(NULL); // Update last message time
+        last_message_time = time(NULL);
         printf("Received: %s\n", buffer);
 
-        // Simulate message processing delay
         usleep(100000);
     }
 }
 
-// Function to handle disconnected drones
 void handle_disconnected_drone(int disconnected_drone_id) {
     printf("Handling disconnected drone: %d\n", disconnected_drone_id);
 
     pthread_mutex_lock(&drones_lock);
     for (int i = 0; i < mission_list_size; i++) {
         if (mission_list[i].assigned_drone_id == disconnected_drone_id) {
-            // Reassign mission
-            for (int j = 0; j < drone_count; j++) {
-                if (drones[j].status == IDLE) {
-                    mission_list[i].assigned_drone_id = drones[j].id;
-                    drones[j].status = ON_MISSION;
-                    printf("Mission reassigned to Drone %d\n", drones[j].id);
+            Node *node = drones->head;
+            while (node != NULL) {
+                Drone *drone = (Drone *)node->data;
+                if (drone->status == IDLE) {
+                    mission_list[i].assigned_drone_id = drone->id;
+                    drone->status = ON_MISSION;
+                    printf("Mission reassigned to Drone %d\n", drone->id);
                     break;
                 }
+                node = node->next;
             }
         }
     }
     pthread_mutex_unlock(&drones_lock);
 }
 
-// Main server function
 int main() {
+    drones = create_list(sizeof(Drone), MAX_DRONES);
+
     int server_socket;
     struct sockaddr_in server_addr;
 
