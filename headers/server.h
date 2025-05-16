@@ -4,7 +4,7 @@
 #include "map.h" // Shared structures like Coord
 
 #define MAX_DRONES 100
-
+void handle_disconnected_drone(int disconnected_drone_id);
 // Drone structure definition
 typedef struct {
     int drone_fd;

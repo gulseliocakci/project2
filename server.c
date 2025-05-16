@@ -5,9 +5,19 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <time.h>
-#include "server.h" // Server-specific header file
-
+#include "headers/server.h" // Server-specific header file
+#include "headers/mission.h"
 #define TIMEOUT_THRESHOLD 10 // 10 seconds timeout
+#include "headers/map.h" // Düzgün tanımlamalar için map.h dahil 
+
+Mission mission_list[MAX_MISSIONS]; // Görev listesini tanımla
+int mission_list_size = 0;          // Görev listesi başlangıç boyutu
+/*
+Drone drones[MAX_DRONES]; // Drone dizisini tanımlıyoruz
+int drone_count = 0;      // Aktif drone sayısını sıfırla
+*/
+List *drones = NULL;
+int drone_count = 0; 
 
 // Global drone list and mutex for thread safety
 pthread_mutex_t drones_lock = PTHREAD_MUTEX_INITIALIZER;

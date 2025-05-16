@@ -18,6 +18,7 @@ typedef struct drone {
     int status;             // IDLE, ON_MISSION, DISCONNECTED
     Coord coord;
     Coord target;
+    DroneStatus status; // Drone'un durumu (IDLE, ON_MISSION, DISCONNECTED)
     struct tm last_update;
     pthread_mutex_t lock;   // Per-drone mutex
     pthread_cond_t mission_cond; // <- Görev beklemek için condition variable
