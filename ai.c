@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <pthread.h>
+#include "headers/survivor.h"
+#include "headers/globals.h"
 
 void assign_mission(Drone *drone, Coord target) {
     pthread_mutex_lock(&drone->lock);

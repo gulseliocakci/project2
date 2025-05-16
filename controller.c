@@ -7,11 +7,11 @@
 #include "headers/list.h"
 #include "headers/view.h"
 #include <stdio.h>
-List *survivors, *helpedsurvivors, *drones;
+//List *survivors, *helpedsurvivors, *drones;
 
 
 int main() {
-    // Initialize global lists
+    // Initialize global listss
     survivors = create_list(sizeof(Survivor), 1000);     // Survivors waiting for help
     helpedsurvivors = create_list(sizeof(Survivor), 1000); // Helped survivors
     drones = create_list(sizeof(Drone), 100);            // Active drones

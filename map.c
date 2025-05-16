@@ -2,12 +2,7 @@
 #include "headers/list.h"
 #include <stdlib.h>
 #include <stdio.h>
-
-// Global map instance (defined here, declared extern in map.h)
-Map map;
-
-// Global değişkenler
-List *drones = NULL; // Drone listesinin başlangıç noktası
+#include "headers/globals.h"
 
 void init_map(int height, int width) {
     map.height = height;

@@ -10,8 +10,7 @@
 #include "headers/list.h"
 
 
-extern Map map;
-extern List *drones;
+
 // Global drone fleet
 Drone *drone_fleet = NULL;
 int num_drones = 10; // Default fleet size

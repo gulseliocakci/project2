@@ -24,12 +24,6 @@ typedef struct drone {
     pthread_cond_t mission_cond;// Görev beklemek için condition variable
 } Drone;
 
-// Global drone list (extern)
-extern List *drones;        // Drone'ların bağlı olduğu liste
-extern Drone *drone_fleet;  // Drone dizisi
-extern int num_drones;      // Aktif drone sayısı
-
-
 // Yeni eklenen fonksiyonlar için tanımlamalar
 void* send_heartbeat(void* arg); // Heartbeat gönderimi
 void assign_mission(Drone *d, Coord target);
