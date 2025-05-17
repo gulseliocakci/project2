@@ -1,13 +1,23 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <pthread.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <time.h>
-#include "../headers/drone.h"
 
-// Metrics for Load Testing
+// Maksimum drone bağlantı sayısı
+#define MAX_DRONES 50
+
+// Drone yapısı
+typedef struct {
+    int id;
+    int x;
+    int y;
+    int active; // 0: Bağlantı yok, 1: Aktif
+    pthread_mutex_t lock;
+} Drone;
+
+// Sunucu metrikleri
 typedef struct {
     int total_connections;
     int active_connections;
@@ -15,9 +25,56 @@ typedef struct {
     double total_connection_time;
 } ServerMetrics;
 
+// Global değişkenler
+Drone drones[MAX_DRONES];
 ServerMetrics metrics = {0, 0, 0, 0.0};
+pthread_mutex_t drones_lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t metrics_lock = PTHREAD_MUTEX_INITIALIZER;
 
+// Drone'ları başlatma
+void initialize_drones() {
+    for (int i = 0; i < MAX_DRONES; i++) {
+        drones[i].id = i;
+        drones[i].x = 0;
+        drones[i].y = 0;
+        drones[i].active = 0; // Başlangıçta tüm drone'lar pasif
+        pthread_mutex_init(&drones[i].lock, NULL);
+    }
+}
+
+// Görevleri drone'lara atama
+void assign_missions() {
+    pthread_mutex_lock(&drones_lock);
+    for (int i = 0; i < MAX_DRONES; i++) {
+        if (drones[i].active) {
+            pthread_mutex_lock(&drones[i].lock);
+
+            // Rastgele hedef koordinatı oluştur
+            int target_x = rand() % 100;
+            int target_y = rand() % 100;
+
+            printf("Assigning mission to Drone %d: Move to (%d, %d)\n", drones[i].id, target_x, target_y);
+
+            // Simüle edilen hareket
+            while (drones[i].x != target_x || drones[i].y != target_y) {
+                if (drones[i].x < target_x) drones[i].x++;
+                else if (drones[i].x > target_x) drones[i].x--;
+
+                if (drones[i].y < target_y) drones[i].y++;
+                else if (drones[i].y > target_y) drones[i].y--;
+
+                printf("Drone %d moving to (%d, %d)\n", drones[i].id, drones[i].x, drones[i].y);
+                sleep(1); // Hareket simülasyonu için bekleme
+            }
+
+            printf("Drone %d: Mission completed!\n", drones[i].id);
+            pthread_mutex_unlock(&drones[i].lock);
+        }
+    }
+    pthread_mutex_unlock(&drones_lock);
+}
+
+// Drone bağlantısını işleme
 void* handle_drone(void* arg) {
     int client_socket = *(int*)arg;
     free(arg);
@@ -51,7 +108,7 @@ void* handle_drone(void* arg) {
         metrics.total_messages_received++;
         pthread_mutex_unlock(&metrics_lock);
 
-        // Simulate some processing delay
+        // Simüle edilen bir işlem gecikmesi
         usleep(100000);
     }
 
@@ -63,9 +120,12 @@ void* handle_drone(void* arg) {
     return NULL;
 }
 
+// Sunucu başlatma ve bağlantıları dinleme
 int main() {
     int server_socket;
     struct sockaddr_in server_addr;
+
+    initialize_drones();
 
     server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (server_socket == 0) {
@@ -106,7 +166,7 @@ int main() {
         pthread_detach(thread_id);
     }
 
-    // Server metrics report (this won't run unless server is terminated manually)
+    // Sunucu metriklerini raporlama (sunucu elle durdurulursa çalışır)
     printf("\n=== Server Metrics ===\n");
     printf("Total Connections: %d\n", metrics.total_connections);
     printf("Active Connections: %d\n", metrics.active_connections);
