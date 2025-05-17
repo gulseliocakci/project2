@@ -10,9 +10,12 @@
 #include "headers/drone.h"
 #include "headers/map.h"
 #include "headers/list.h"
+#include "headers/globals.h"
 
 #define TIMEOUT_THRESHOLD 10 // 10 saniyelik timeout
 #define MAX_MISSED_HEARTBEATS 3 // Maksimum izin verilen kaçırılan heartbeat sayısı
+
+List *survivors;
 
 Mission mission_list[MAX_MISSIONS];
 int mission_list_size = 0;
@@ -118,6 +121,9 @@ void handle_disconnected_drone(int disconnected_drone_id) {
 int main() {
     drones = create_list(sizeof(Drone), MAX_DRONES);
 
+    survivors = create_list(sizeof(Survivor), 1000);
+    init_map(40, 30);
+    
     pthread_t heartbeat_thread;
     pthread_create(&heartbeat_thread, NULL, monitor_heartbeats, NULL);
 
