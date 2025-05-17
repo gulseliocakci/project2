@@ -1,12 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
-#include <unistd.h>
-#include <arpa/inet.h>
 #include <time.h>
+#include <math.h>
+#include <unistd.h>
 
-// Maksimum drone bağlantı sayısı
 #define MAX_DRONES 50
+#define MAX_SURVIVORS 100
+
+void start_drone_manager(); // start_drone_manager fonksiyonu prototipi
 
 // Drone yapısı
 typedef struct {
@@ -17,19 +19,21 @@ typedef struct {
     pthread_mutex_t lock;
 } Drone;
 
-// Sunucu metrikleri
+// Survivor yapısı
 typedef struct {
-    int total_connections;
-    int active_connections;
-    int total_messages_received;
-    double total_connection_time;
-} ServerMetrics;
+    int id;
+    int x;
+    int y;
+    int helped; // 0: Yardım edilmedi, 1: Yardım edildi
+} Survivor;
 
 // Global değişkenler
 Drone drones[MAX_DRONES];
-ServerMetrics metrics = {0, 0, 0, 0.0};
+Survivor survivors[MAX_SURVIVORS];
+int survivor_count = 0;
+
 pthread_mutex_t drones_lock = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t metrics_lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t survivors_lock = PTHREAD_MUTEX_INITIALIZER;
 
 // Drone'ları başlatma
 void initialize_drones() {
@@ -42,137 +46,59 @@ void initialize_drones() {
     }
 }
 
-// Görevleri drone'lara atama
-void assign_missions() {
+// En yakın drone'u bulma
+int find_closest_drone(int x, int y) {
+    int closest_drone = -1;
+    double min_distance = __DBL_MAX__;
+
     pthread_mutex_lock(&drones_lock);
     for (int i = 0; i < MAX_DRONES; i++) {
         if (drones[i].active) {
             pthread_mutex_lock(&drones[i].lock);
-
-            // Rastgele hedef koordinatı oluştur
-            int target_x = rand() % 100;
-            int target_y = rand() % 100;
-
-            printf("Assigning mission to Drone %d: Move to (%d, %d)\n", drones[i].id, target_x, target_y);
-
-            // Simüle edilen hareket
-            while (drones[i].x != target_x || drones[i].y != target_y) {
-                if (drones[i].x < target_x) drones[i].x++;
-                else if (drones[i].x > target_x) drones[i].x--;
-
-                if (drones[i].y < target_y) drones[i].y++;
-                else if (drones[i].y > target_y) drones[i].y--;
-
-                printf("Drone %d moving to (%d, %d)\n", drones[i].id, drones[i].x, drones[i].y);
-                sleep(1); // Hareket simülasyonu için bekleme
+            double distance = sqrt(pow(drones[i].x - x, 2) + pow(drones[i].y - y, 2));
+            if (distance < min_distance) {
+                min_distance = distance;
+                closest_drone = i;
             }
-
-            printf("Drone %d: Mission completed!\n", drones[i].id);
             pthread_mutex_unlock(&drones[i].lock);
         }
     }
     pthread_mutex_unlock(&drones_lock);
+
+    return closest_drone;
 }
 
-// Drone bağlantısını işleme
-void* handle_drone(void* arg) {
-    int client_socket = *(int*)arg;
-    free(arg);
+// Görevleri drone'lara atama
+void assign_missions() {
+    pthread_mutex_lock(&survivors_lock);
+    for (int i = 0; i < survivor_count; i++) {
+        if (!survivors[i].helped) { // Yardım edilmemiş survivor
+            int closest_drone = find_closest_drone(survivors[i].x, survivors[i].y);
+            if (closest_drone != -1) {
+                pthread_mutex_lock(&drones[closest_drone].lock);
+                drones[closest_drone].x = survivors[i].x;
+                drones[closest_drone].y = survivors[i].y;
+                survivors[i].helped = 1;
+                pthread_mutex_unlock(&drones[closest_drone].lock);
 
-    char buffer[1024] = {0};
-    clock_t start_time, end_time;
-
-    start_time = clock();
-    pthread_mutex_lock(&metrics_lock);
-    metrics.total_connections++;
-    metrics.active_connections++;
-    pthread_mutex_unlock(&metrics_lock);
-
-    printf("New drone connected. Active drones: %d\n", metrics.active_connections);
-
-    while (1) {
-        int bytes_received = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
-        if (bytes_received <= 0) {
-            printf("Drone disconnected. Closing connection.\n");
-            close(client_socket);
-            pthread_mutex_lock(&metrics_lock);
-            metrics.active_connections--;
-            pthread_mutex_unlock(&metrics_lock);
-            break;
+                printf("Assigned Drone %d to Survivor %d at (%d, %d)\n",
+                       closest_drone, survivors[i].id, survivors[i].x, survivors[i].y);
+            }
         }
-
-        buffer[bytes_received] = '\0';
-        printf("Received: %s\n", buffer);
-
-        pthread_mutex_lock(&metrics_lock);
-        metrics.total_messages_received++;
-        pthread_mutex_unlock(&metrics_lock);
-
-        // Simüle edilen bir işlem gecikmesi
-        usleep(100000);
     }
-
-    end_time = clock();
-    pthread_mutex_lock(&metrics_lock);
-    metrics.total_connection_time += ((double)(end_time - start_time)) / CLOCKS_PER_SEC;
-    pthread_mutex_unlock(&metrics_lock);
-
-    return NULL;
+    pthread_mutex_unlock(&survivors_lock);
 }
 
-// Sunucu başlatma ve bağlantıları dinleme
-int main() {
-    int server_socket;
-    struct sockaddr_in server_addr;
+// Drone Manager başlatma fonksiyonu
+void start_drone_manager() {
+    printf("Drone Manager started successfully!\n");
 
+    // Drone'ları başlat
     initialize_drones();
 
-    server_socket = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_socket == 0) {
-        perror("Socket creation failed");
-        exit(EXIT_FAILURE);
-    }
-
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(8080);
-
-    if (bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-        perror("Bind failed");
-        exit(EXIT_FAILURE);
-    }
-
-    if (listen(server_socket, 50) < 0) {
-        perror("Listen failed");
-        exit(EXIT_FAILURE);
-    }
-
-    printf("Server listening on port 8080...\n");
-
+    // Görev atama simülasyonu (sürekli çalışacak bir döngü)
     while (1) {
-        struct sockaddr_in client_addr;
-        socklen_t client_len = sizeof(client_addr);
-        int* client_socket = malloc(sizeof(int));
-        *client_socket = accept(server_socket, (struct sockaddr*)&client_addr, &client_len);
-
-        if (*client_socket < 0) {
-            perror("Accept failed");
-            free(client_socket);
-            continue;
-        }
-
-        pthread_t thread_id;
-        pthread_create(&thread_id, NULL, handle_drone, (void*)client_socket);
-        pthread_detach(thread_id);
+        assign_missions();
+        sleep(5); // 5 saniye bekle
     }
-
-    // Sunucu metriklerini raporlama (sunucu elle durdurulursa çalışır)
-    printf("\n=== Server Metrics ===\n");
-    printf("Total Connections: %d\n", metrics.total_connections);
-    printf("Active Connections: %d\n", metrics.active_connections);
-    printf("Total Messages Received: %d\n", metrics.total_messages_received);
-    printf("Average Connection Time: %.2f seconds\n",
-           metrics.total_connections > 0 ? metrics.total_connection_time / metrics.total_connections : 0.0);
-
-    return 0;
 }
