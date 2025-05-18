@@ -19,7 +19,7 @@ int main() {
     printf("\n\nadd elements to the list\n");
     for (int i = 0; i < n; i++) {
         Survivor s;
-        sprintf(s.info, "id:%d-aname", i);
+        snprintf(s.info, sizeof(s.info), "id:%d-aname", i); // sprintf yerine snprintf kullanıldı
         s.coord.x = rand() % 1000;
         s.coord.y = rand() % 100;
         Node *n = list->add(list, &s);

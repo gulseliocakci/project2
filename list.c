@@ -246,9 +246,6 @@
 
     free(list->startaddress);
 
-    // Remove memset to avoid redundant clearing
-    // memset(list, 0, sizeof(List)); 
-
     free(list);
 }
  
