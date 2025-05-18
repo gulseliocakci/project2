@@ -15,9 +15,13 @@
 #define TIMEOUT_THRESHOLD 10 // 10 saniyelik timeout
 #define MAX_MISSED_HEARTBEATS 3 // Maksimum izin verilen kaçırılan heartbeat sayısı
 
+List *survivors;
+
 Mission mission_list[MAX_MISSIONS];
 int mission_list_size = 0;
 
+Map map = {100, 100, NULL}; // Varsayılan olarak 100x100 boyutunda bir harita
+List *drones = NULL; // Drone listesi
 pthread_mutex_t drones_lock = PTHREAD_MUTEX_INITIALIZER;
 
 typedef struct {
@@ -116,15 +120,10 @@ void handle_disconnected_drone(int disconnected_drone_id) {
 
 int main() {
     drones = create_list(sizeof(Drone), MAX_DRONES);
+
     survivors = create_list(sizeof(Survivor), 1000);
-
-    // Map başlatma -- ESKİ KODUNDAKİ GİBİ KALSIN:
-    map.width = 100;
-    map.height = 100;
-    map.cells = NULL; // Veya map.cells = malloc(...) ile başlatma fonksiyonunu kullanabilirsin
-    // Eğer init_map fonksiyonun çalışıyorsa onunla da başlatabilirsin:
-    // init_map(100, 100);
-
+    init_map(40, 30);
+    
     pthread_t heartbeat_thread;
     pthread_create(&heartbeat_thread, NULL, monitor_heartbeats, NULL);
 
