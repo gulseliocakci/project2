@@ -1,10 +1,10 @@
 // #include "headers/view.h"
 #include <SDL2/SDL.h>
-#include "headers/view.h"
+
 #include "headers/drone.h"
 #include "headers/map.h"
 #include "headers/survivor.h"
-#include "headers/globals.h"
+
 #define CELL_SIZE 20  // Pixels per map cell
 
 // SDL globals
