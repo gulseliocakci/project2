@@ -1,57 +1,46 @@
-# ==== Derleyici ve Bayraklar ====
 CC = gcc
-CFLAGS = -Wall -Iheaders -lpthread -ljson-c `sdl2-config --cflags --libs`
+CFLAGS = -Wall -Iheaders
+SDLFLAGS = `sdl2-config --cflags --libs`
 
-# ==== Sunucu ve Ana Program Kaynakları ====
-SERVER_SRC = server.c ai.c map.c view.c list.c
+# ==== Sunucu (Server) ====
+SERVER_SRC = server.c ai.c map.c list.c drone.c survivor.c
 SERVER_OBJ = $(SERVER_SRC:.c=.o)
-SERVER_TARGET = server_main
+SERVER_TARGET = server
 
-# ==== Drone İstemci Kaynakları ====
-CLIENT_SRC = drone_client.c
+# ==== Drone İstemci (Client) ====
+CLIENT_SRC = drone_client/drone_client.c drone_client/main.c drone_client/drone_manager.c
 CLIENT_OBJ = $(CLIENT_SRC:.c=.o)
-CLIENT_TARGET = drone_client
-
-# ==== Survivor Üretici Testi ====
-SURVIVOR_GEN_SRC = survivor_generator.c list.c map.c
-SURVIVOR_GEN_OBJ = $(SURVIVOR_GEN_SRC:.c=.o)
-SURVIVOR_GEN_TARGET = survivor_generator_test
+CLIENT_TARGET = drone_client_exec
 
 # ==== Liste Testi ====
-LIST_TEST_SRC = tests/list_test.c list.c
+LIST_TEST_SRC = tests/listtest.c list.c
 LIST_TEST_OBJ = $(LIST_TEST_SRC:.c=.o)
-LIST_TEST_TARGET = list_test
+LIST_TEST_TARGET = listtest
 
-# ==== SDL Viewer Testi (opsiyonel) ====
-VIEWER_TEST_SRC = tests/viewer_test.c view.c map.c list.c
-VIEWER_TEST_OBJ = $(VIEWER_TEST_SRC:.c=.o)
-VIEWER_TEST_TARGET = viewer_test
+# ==== Görsel Viewer (SDL ile) ====
+VIEWER_SRC = client_viewer.c map.c list.c view.c
+VIEWER_OBJ = $(VIEWER_SRC:.c=.o)
+VIEWER_TARGET = viewer_test
 
 # ==== Varsayılan Derleme ====
-all: $(SERVER_TARGET) $(CLIENT_TARGET) $(SURVIVOR_GEN_TARGET) $(LIST_TEST_TARGET) $(VIEWER_TEST_TARGET)
+all: $(SERVER_TARGET) $(CLIENT_TARGET) $(LIST_TEST_TARGET) $(VIEWER_TARGET)
 
-# ==== Ana Sunucu ====
+# ==== Hedefler ====
 $(SERVER_TARGET): $(SERVER_OBJ)
-	$(CC) $(CFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) -o $@ $^ -lpthread -ljson-c
 
-# ==== Drone Client ====
 $(CLIENT_TARGET): $(CLIENT_OBJ)
-	$(CC) $(CFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) -o $@ $^ -ljson-c -lm -lpthread
 
-# ==== Survivor Producer Test ====
-$(SURVIVOR_GEN_TARGET): $(SURVIVOR_GEN_OBJ)
-	$(CC) $(CFLAGS) -o $@ $^
-
-# ==== Liste Testi ====
 $(LIST_TEST_TARGET): $(LIST_TEST_OBJ)
-	$(CC) $(CFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) -o $@ $^ -lpthread
 
-# ==== Viewer Testi ====
-$(VIEWER_TEST_TARGET): $(VIEWER_TEST_OBJ)
-	$(CC) $(CFLAGS) -o $@ $^
+$(VIEWER_TARGET): $(VIEWER_OBJ)
+	$(CC) $(CFLAGS) $(SDLFLAGS) -o $@ $^
 
 # ==== Temizlik ====
 clean:
-	rm -f *.o $(SERVER_TARGET) $(CLIENT_TARGET) $(SURVIVOR_GEN_TARGET) $(LIST_TEST_TARGET) $(VIEWER_TEST_TARGET)
+	find . -name "*.o" -type f -delete
+	rm -f $(SERVER_TARGET) $(CLIENT_TARGET) $(LIST_TEST_TARGET) $(VIEWER_TARGET)
 
 .PHONY: all clean
