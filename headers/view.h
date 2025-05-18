@@ -10,6 +10,6 @@ extern void draw_survivors();
 extern void draw_grid();
 extern int draw_map();
 extern int check_events();
-extern int quit_all();
+extern void quit_all();
 
 #endif
