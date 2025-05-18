@@ -10,12 +10,10 @@
 #include "headers/list.h"
 
 
-
-// Global drone fleet
-Drone *drone_fleet = NULL;
-int num_drones = 10; // Default fleet size
-
 void initialize_drones() {
+    // num_drones burada default atanacaksa globals.c'de 0 bırak, burada 10 ata:
+    if (num_drones == 0) num_drones = 10;
+
     drone_fleet = malloc(sizeof(Drone) * num_drones);
     srand(time(NULL));
 

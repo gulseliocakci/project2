@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "unistd.h": "c",
-        "server.h": "c"
+        "server.h": "c",
+        "map.h": "c"
     }
 }
