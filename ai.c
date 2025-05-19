@@ -12,39 +12,39 @@ void* ai_controller(void* arg) {
     while (!should_quit) {
         if (!survivors || !drones) continue;
 
-        // Survivor listesini kontrol et
-        Node* survivor_node = survivors->head;
-        while (survivor_node && survivor_node->occupied) {
-            Survivor* s = (Survivor*)survivor_node->data;
-            if (s && s->status == 0) { // Kurtarılmamış survivor
-                // En yakın boşta olan drone'u bul
-                Node* drone_node = drones->head;
-                Drone* closest_drone = NULL;
+        // Her boşta olan drone için en yakın survivor'ı bul
+        Node* drone_node = drones->head;
+        while (drone_node && drone_node->occupied) {
+            Drone* d = (Drone*)drone_node->data;
+            if (d && d->status == IDLE && d->battery_level > 20) {
+                // En yakın kurtarılmamış survivor'ı bul
+                Node* survivor_node = survivors->head;
+                Survivor* closest_survivor = NULL;
                 float min_distance = INFINITY;
 
-                while (drone_node && drone_node->occupied) {
-                    Drone* d = (Drone*)drone_node->data;
-                    if (d && d->status == IDLE && d->battery_level > 20) {
+                while (survivor_node && survivor_node->occupied) {
+                    Survivor* s = (Survivor*)survivor_node->data;
+                    if (s && s->status == 0) { // Kurtarılmamış survivor
                         float dist = sqrt(pow(d->coord.x - s->coord.x, 2) + 
                                        pow(d->coord.y - s->coord.y, 2));
                         if (dist < min_distance) {
                             min_distance = dist;
-                            closest_drone = d;
+                            closest_survivor = s;
                         }
                     }
-                    drone_node = drone_node->next;
+                    survivor_node = survivor_node->next;
                 }
 
-                // Uygun drone bulunduysa görevi ata
-                if (closest_drone) {
-                    pthread_mutex_lock(&closest_drone->lock);
-                    closest_drone->target = s->coord;
-                    closest_drone->status = ON_MISSION;
-                    pthread_cond_signal(&closest_drone->mission_cond);
-                    pthread_mutex_unlock(&closest_drone->lock);
+                // Uygun survivor bulunduysa görevi ata
+                if (closest_survivor) {
+                    pthread_mutex_lock(&d->lock);
+                    d->target = closest_survivor->coord;
+                    d->status = ON_MISSION;
+                    pthread_cond_signal(&d->mission_cond);
+                    pthread_mutex_unlock(&d->lock);
                 }
             }
-            survivor_node = survivor_node->next;
+            drone_node = drone_node->next;
         }
         usleep(100000); // 100ms bekle
     }
