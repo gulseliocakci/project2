@@ -8,6 +8,7 @@
 int manhattan_distance(Coord a, Coord b);
 Drone* find_closest_idle_drone(Coord target);
 float calculate_distance(Coord a, Coord b);
+int is_targeted(Survivor* survivor);
 
 // AI kontrolcü fonksiyonları
 void* ai_controller(void *args);

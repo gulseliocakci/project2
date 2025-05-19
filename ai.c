@@ -7,9 +7,26 @@
 #include <unistd.h>
 #include "headers/view.h"
 
-// Yardımcı fonksiyon: İki koordinat arasındaki mesafeyi hesaplar
+// Mesafe hesaplama fonksiyonu - mutlak değer kullanarak daha doğru hesaplama
 float calculate_distance(Coord a, Coord b) {
-    return sqrt(pow(a.x - b.x, 2) + pow(a.y - b.y, 2));
+    return fabs(a.x - b.x) + fabs(a.y - b.y);  // Manhattan mesafesi
+}
+
+// Survivor'ın başka bir drone tarafından hedeflenip hedeflenmediğini kontrol et
+int is_targeted(Survivor* survivor) {
+    if (!drones) return 0;
+    
+    Node* drone_node = drones->head;
+    while (drone_node && drone_node->occupied) {
+        Drone* d = (Drone*)drone_node->data;
+        if (d && d->status == ON_MISSION) {
+            if (d->target.x == survivor->coord.x && d->target.y == survivor->coord.y) {
+                return 1;
+            }
+        }
+        drone_node = drone_node->next;
+    }
+    return 0;
 }
 
 void* ai_controller(void* arg) {
@@ -21,60 +38,42 @@ void* ai_controller(void* arg) {
             continue;
         }
 
-        // Önce tüm kurtarılmamış survivor'ları bul
-        Node* waiting_survivors[1000];  // Max survivor sayısı kadar
-        int survivor_count = 0;
-        
-        Node* survivor_node = survivors->head;
-        while (survivor_node && survivor_node->occupied) {
-            Survivor* s = (Survivor*)survivor_node->data;
-            if (s && s->status == 0) { // Sadece bekleyen survivor'lar
-                waiting_survivors[survivor_count++] = survivor_node;
-            }
-            survivor_node = survivor_node->next;
-        }
-
-        // Her boşta olan drone için
+        // Boşta olan drone'ları kontrol et
         Node* drone_node = drones->head;
         while (drone_node && drone_node->occupied) {
             Drone* d = (Drone*)drone_node->data;
             
+            // Sadece boşta olan ve yeterli pili olan drone'ları işle
             if (d && d->status == IDLE && d->battery_level > 20) {
+                Survivor* best_survivor = NULL;
                 float min_distance = INFINITY;
-                Survivor* closest_survivor = NULL;
-                Node* closest_node = NULL;
                 
-                // Bu drone için gerçekten en yakın survivor'ı bul
-                for (int i = 0; i < survivor_count; i++) {
-                    Survivor* s = (Survivor*)waiting_survivors[i]->data;
-                    float dist = calculate_distance(d->coord, s->coord);
+                // Tüm survivor'ları kontrol et
+                Node* survivor_node = survivors->head;
+                while (survivor_node && survivor_node->occupied) {
+                    Survivor* s = (Survivor*)survivor_node->data;
                     
-                    if (dist < min_distance) {
-                        min_distance = dist;
-                        closest_survivor = s;
-                        closest_node = waiting_survivors[i];
-                    }
-                }
-                
-                // En yakın survivor'a görevi ata ve listeden çıkar
-                if (closest_survivor) {
-                    closest_survivor->status = 2;  // Drone atandı
-                    pthread_mutex_lock(&d->lock);
-                    d->target = closest_survivor->coord;
-                    d->status = ON_MISSION;
-                    pthread_cond_signal(&d->mission_cond);
-                    pthread_mutex_unlock(&d->lock);
-                    
-                    // Bu survivor'ı listeden çıkar
-                    for (int i = 0; i < survivor_count; i++) {
-                        if (waiting_survivors[i] == closest_node) {
-                            for (int j = i; j < survivor_count - 1; j++) {
-                                waiting_survivors[j] = waiting_survivors[j + 1];
-                            }
-                            survivor_count--;
-                            break;
+                    // Sadece kurtarılmamış ve hedeflenmemiş survivor'ları değerlendir
+                    if (s && s->status == 0 && !is_targeted(s)) {
+                        float dist = calculate_distance(d->coord, s->coord);
+                        
+                        // En yakın survivor'ı bul
+                        if (dist < min_distance) {
+                            min_distance = dist;
+                            best_survivor = s;
                         }
                     }
+                    survivor_node = survivor_node->next;
+                }
+                
+                // En yakın uygun survivor bulunduysa görevi ata
+                if (best_survivor) {
+                    pthread_mutex_lock(&d->lock);
+                    d->target = best_survivor->coord;
+                    d->status = ON_MISSION;
+                    best_survivor->status = 2;  // Drone atandı
+                    pthread_cond_signal(&d->mission_cond);
+                    pthread_mutex_unlock(&d->lock);
                 }
             }
             drone_node = drone_node->next;
