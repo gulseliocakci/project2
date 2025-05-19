@@ -3,9 +3,11 @@
 
 #include "drone.h"
 #include "survivor.h"
+#include "coord.h"
 
 int manhattan_distance(Coord a, Coord b);
 Drone* find_closest_idle_drone(Coord target);
+float calculate_distance(Coord a, Coord b);
 
 // AI kontrolcü fonksiyonları
 void* ai_controller(void *args);

@@ -43,11 +43,12 @@ void* drone_behavior(void* arg) {
                 while (survivor_node && survivor_node->occupied) {
                     Survivor* s = (Survivor*)survivor_node->data;
                     if (s && s->coord.x == drone->target.x && 
-                        s->coord.y == drone->target.y && s->status == 0) {
+                        s->coord.y == drone->target.y && 
+                        (s->status == 0 || s->status == 2)) {  // Bekleyen veya atanmış survivor
                         s->status = 1; // Kurtarıldı
                         time_t current_time;
                         time(&current_time);
-                        s->helped_time = *localtime(&current_time); // Düzeltildi
+                        s->helped_time = *localtime(&current_time);
                         break;
                     }
                     survivor_node = survivor_node->next;
