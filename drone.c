@@ -32,40 +32,50 @@ void* drone_behavior(void* arg) {
                 continue;
             }
 
-            // Hedefe doğru hareket
-            int dx = drone->target.x - drone->coord.x;
-            int dy = drone->target.y - drone->coord.y;
+            // Hedefle mevcut konum arasındaki mesafeyi hesapla
+            int target_reached = 0;
             
-            // Eğer hem x hem y koordinatı hedefle aynıysa, hedefe ulaşılmış demektir
-            if (dx == 0 && dy == 0) {
-                printf("Drone %d: Hedefe ulaştı! (%d, %d)\n", 
-                       drone->id, drone->coord.x, drone->coord.y);
+            // Tam sayı koordinat kontrolü
+            if (drone->coord.x == drone->target.x && 
+                drone->coord.y == drone->target.y) {
+                target_reached = 1;
+            } else {
+                // Her seferinde bir birim hareket et
+                if (drone->coord.x < drone->target.x) drone->coord.x++;
+                else if (drone->coord.x > drone->target.x) drone->coord.x--;
                 
-                // Survivor'ı güncelle
-                Node* survivor_node = survivors->head;
-                while (survivor_node && survivor_node->occupied) {
-                    Survivor* s = (Survivor*)survivor_node->data;
+                if (drone->coord.y < drone->target.y) drone->coord.y++;
+                else if (drone->coord.y > drone->target.y) drone->coord.y--;
+            }
+
+            if (target_reached) {
+                printf("Drone %d: Hedefe ulaştı! Konum:(%d,%d) Hedef:(%d,%d)\n", 
+                    drone->id, drone->coord.x, drone->coord.y, 
+                    drone->target.x, drone->target.y);
+
+                // Survivor listesini kontrol et
+                Node* curr = survivors->head;
+                while (curr && curr->occupied) {
+                    Survivor* s = (Survivor*)curr->data;
                     if (s && s->coord.x == drone->target.x && 
                         s->coord.y == drone->target.y && 
                         (s->status == 0 || s->status == 2)) {
                         
-                        printf("Drone %d: Survivor kurtarıldı!\n", drone->id);
-                        s->status = 1; // Kurtarıldı
+                        s->status = 1;  // Kurtarıldı
+                        printf("Drone %d: Survivor (%d,%d) kurtarıldı!\n", 
+                            drone->id, s->coord.x, s->coord.y);
+                        
                         time_t current_time;
                         time(&current_time);
                         s->helped_time = *localtime(&current_time);
                         break;
                     }
-                    survivor_node = survivor_node->next;
+                    curr = curr->next;
                 }
-                drone->status = IDLE;
-            } else {
-                // Her adımda x ve y koordinatlarını birer birim hedefe doğru hareket ettir
-                if (dx > 0) drone->coord.x += 1;
-                else if (dx < 0) drone->coord.x -= 1;
                 
-                if (dy > 0) drone->coord.y += 1;
-                else if (dy < 0) drone->coord.y -= 1;
+                // Görevi tamamla
+                drone->status = IDLE;
+                printf("Drone %d: Görev tamamlandı, IDLE durumuna geçti.\n", drone->id);
             }
             
             pthread_mutex_unlock(&drone->lock);

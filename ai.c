@@ -83,20 +83,25 @@ void* ai_controller(void* arg) {
                 temp = temp->next;
             }
 
-            if (!assigned_drones[drone_id] && !assigned_survivors[survivor_id]) {
-                // Drone'u survivor'a ata
-                pthread_mutex_lock(&d->lock);
-                d->target = s->coord;
-                d->status = ON_MISSION;
-                s->status = 2; // Drone atandı
-                printf("AI: Drone %d -> Survivor (%d, %d), Mesafe: %.2f\n", 
-                d->id, s->coord.x, s->coord.y, assignments[i].distance);
-                pthread_cond_signal(&d->mission_cond);
-                pthread_mutex_unlock(&d->lock);
+            // ai_controller fonksiyonunda atama yapılan yerde:
+if (!assigned_drones[drone_id] && !assigned_survivors[survivor_id]) {
+    pthread_mutex_lock(&d->lock);
+    
+    // Hedef koordinatlarını ayarla
+    d->target.x = s->coord.x;
+    d->target.y = s->coord.y;
+    d->status = ON_MISSION;
+    s->status = 2; // Drone atandı
+    
+    printf("AI: Drone %d başlangıç:(%d,%d) -> Survivor hedef:(%d,%d)\n", 
+           d->id, d->coord.x, d->coord.y, s->coord.x, s->coord.y);
+    
+    pthread_cond_signal(&d->mission_cond);
+    pthread_mutex_unlock(&d->lock);
 
-                 assigned_drones[drone_id] = 1;
-                 assigned_survivors[survivor_id] = 1;
-                }
+    assigned_drones[drone_id] = 1;
+    assigned_survivors[survivor_id] = 1;
+}
         }
 
         usleep(100000); // 100ms bekle
