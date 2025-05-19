@@ -12,6 +12,7 @@ int is_targeted(Survivor* survivor);
 
 // AI kontrolcü fonksiyonları
 void* ai_controller(void *args);
+float calculate_distance(Coord a, Coord b);
 
 // AI parametreleri
 typedef struct {
