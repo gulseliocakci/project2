@@ -1,47 +1,40 @@
 CC = gcc
-CFLAGS = -Wall -Iheaders
-SDLFLAGS = `sdl2-config --cflags --libs`
+CFLAGS = -Wall -Wextra -pthread -I./headers -D_XOPEN_SOURCE=700 -D_DEFAULT_SOURCE
+LDFLAGS = -lSDL2 -lm
 
-# ==== Sunucu (Server) ====
-SERVER_SRC = server.c ai.c map.c list.c drone.c survivor.c globals.c
-SERVER_TARGET = server
+# Kaynak dosyalar
+SRCS = main.c globals.c list.c drone.c survivor.c ai.c view.c map.c
+OBJS = $(SRCS:.c=.o)
+TARGET = drone_simulator
 
-# ==== Drone İstemci (Client) ====
-CLIENT_SRC = drone_client/drone_client.c drone_client/main.c drone_client/drone_manager.c
-CLIENT_TARGET = drone_client_exec
+# Test dosyaları
+TEST_SRCS = test.c globals.c list.c drone.c survivor.c ai.c view.c map.c
+TEST_OBJS = $(TEST_SRCS:.c=.o)
+TEST_TARGET = test_simulator
 
-# ==== Liste Testi ====
-LIST_TEST_SRC = tests/listtest.c list.c
-LIST_TEST_TARGET = listtest
+.PHONY: all clean test
 
-# ==== Görsel Viewer (server/general, SDL ile) ====
-VIEWER_SRC = view.c map.c list.c drone.c survivor.c globals.c
-VIEWER_TARGET = viewer_test
+# Varsayılan hedef
+all: $(TARGET)
 
-# ==== Görsel Client Viewer (SDL ile) ====
-CLIENT_VIEWER_SRC = client_viewer.c
-CLIENT_VIEWER_TARGET = client_viewer_exec
+# Ana program
+$(TARGET): $(OBJS)
+	$(CC) $(OBJS) -o $(TARGET) $(LDFLAGS)
 
-# ==== Varsayılan Derleme ====
-all: $(SERVER_TARGET) $(CLIENT_TARGET) $(LIST_TEST_TARGET) $(VIEWER_TARGET) $(CLIENT_VIEWER_TARGET)
+# Test programı
+test: $(TEST_TARGET)
+	./$(TEST_TARGET)
 
-$(SERVER_TARGET): $(SERVER_SRC)
-	$(CC) $(CFLAGS) -o $@ $^ -lpthread -ljson-c
+$(TEST_TARGET): $(TEST_OBJS)
+	$(CC) $(TEST_OBJS) -o $(TEST_TARGET) $(LDFLAGS)
 
-$(CLIENT_TARGET): $(CLIENT_SRC)
-	$(CC) $(CFLAGS) -o $@ $^ -ljson-c -lm -lpthread
+# Nesne dosyaları
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
-$(LIST_TEST_TARGET): $(LIST_TEST_SRC)
-	$(CC) $(CFLAGS) -o $@ $^ -lpthread
-
-$(VIEWER_TARGET): $(VIEWER_SRC)
-	$(CC) $(CFLAGS) -o $@ $^ $(SDLFLAGS)
-
-$(CLIENT_VIEWER_TARGET): $(CLIENT_VIEWER_SRC)
-	$(CC) $(CFLAGS) -o $@ $^ $(SDLFLAGS)
-
+# Temizleme
 clean:
-	find . -name "*.o" -type f -delete
-	rm -f $(SERVER_TARGET) $(CLIENT_TARGET) $(LIST_TEST_TARGET) $(VIEWER_TARGET) $(CLIENT_VIEWER_TARGET)
+	rm -f $(OBJS) $(TEST_OBJS) $(TARGET) $(TEST_TARGET)
 
-.PHONY: all clean
+# Her ikisini de derle
+all-targets: $(TARGET) $(TEST_TARGET)

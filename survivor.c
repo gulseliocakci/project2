@@ -60,6 +60,28 @@ void *survivor_generator(void *args) {
     return NULL;
 }
 
+// Survivor durum güncellemesi için yardımcı fonksiyon
+void update_survivor_status(Survivor *s, int new_status) {
+    pthread_mutex_lock(&survivors->lock);
+    s->status = new_status;
+    if (new_status == 1) { // Helped
+        time_t t;
+        time(&t);
+        localtime_r(&t, &s->helped_time);
+    }
+    pthread_mutex_unlock(&survivors->lock);
+}
+
+// Survivor yardım süresini hesapla
+int calculate_help_time(Survivor *s) {
+    if (s->status == 0) return -1; // Henüz yardım edilmemiş
+    
+    time_t discovery = mktime(&s->discovery_time);
+    time_t helped = mktime(&s->helped_time);
+    
+    return (int)difftime(helped, discovery);
+}
+
 // Survivor temizleme fonksiyonu
 void survivor_cleanup(Survivor *s) {
     // Harita hücresinden çıkar
@@ -67,10 +89,10 @@ void survivor_cleanup(Survivor *s) {
     map.cells[s->coord.x][s->coord.y].survivors->removedata(map.cells[s->coord.x][s->coord.y].survivors, s);
     pthread_mutex_unlock(&map.cells[s->coord.x][s->coord.y].survivors->lock);
 
-    // Global survivor listesine çıkar
+    // Global survivor listesinden çıkar
     pthread_mutex_lock(&survivors->lock);
-    survivors->removenode(survivors, (Node *)s);  // Survivor'ı global listeden çıkar
+    survivors->removedata(survivors, s);
     pthread_mutex_unlock(&survivors->lock);
 
-    free(s);  // Hafıza temizleme
+    free(s);
 }

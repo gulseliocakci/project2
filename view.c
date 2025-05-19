@@ -1,162 +1,176 @@
-// #include "headers/view.h"
-#include <SDL2/SDL.h>
-
+#include "headers/view.h"
+#include "headers/globals.h"
 #include "headers/drone.h"
-#include "headers/map.h"
 #include "headers/survivor.h"
+#include "headers/coord.h"
+#include "headers/list.h"
+#include <SDL2/SDL.h>
+#include <stdio.h>
 
-#define CELL_SIZE 20  // Pixels per map cell
+SDL_Window *window = NULL;
+SDL_Renderer *renderer = NULL;
 
-// SDL globals
-SDL_Window* window = NULL;
-SDL_Renderer* renderer = NULL;
-SDL_Event event;
-int window_width, window_height;
-
-// Colors
-const SDL_Color BLACK = {0, 0, 0, 255};
-const SDL_Color RED = {255, 0, 0, 255};
-const SDL_Color BLUE = {0, 0, 255, 255};
-const SDL_Color GREEN = {0, 255, 0, 255};
-const SDL_Color WHITE = {255, 255, 255, 255};
-
-int init_sdl_window() {
-    window_width = map.width * CELL_SIZE;
-    window_height = map.height * CELL_SIZE;
-
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-        fprintf(stderr, "SDL_Init Error: %s\n", SDL_GetError());
+int init_sdl_window(void) {
+    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+        fprintf(stderr, "SDL initialization failed: %s\n", SDL_GetError());
         return 1;
     }
 
-    window =
-        SDL_CreateWindow("Drone Simulator", SDL_WINDOWPOS_CENTERED,
-                         SDL_WINDOWPOS_CENTERED, window_width,
-                         window_height, SDL_WINDOW_SHOWN);
+    window = SDL_CreateWindow("Drone Coordination System",
+                            SDL_WINDOWPOS_UNDEFINED,
+                            SDL_WINDOWPOS_UNDEFINED,
+                            800, 600,
+                            SDL_WINDOW_SHOWN);
     if (!window) {
-        fprintf(stderr, "SDL_CreateWindow Error: %s\n",
-                SDL_GetError());
+        fprintf(stderr, "Window creation failed: %s\n", SDL_GetError());
         SDL_Quit();
         return 1;
     }
 
-    renderer =
-        SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    renderer = SDL_CreateRenderer(window, -1, 
+                                SDL_RENDERER_ACCELERATED | 
+                                SDL_RENDERER_PRESENTVSYNC);
     if (!renderer) {
+        fprintf(stderr, "Renderer creation failed: %s\n", SDL_GetError());
         SDL_DestroyWindow(window);
-        fprintf(stderr, "SDL_CreateRenderer Error: %s\n",
-                SDL_GetError());
         SDL_Quit();
         return 1;
     }
+
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderClear(renderer);
+    SDL_RenderPresent(renderer);
 
     return 0;
 }
 
-void draw_cell(int x, int y, SDL_Color color) {
-    SDL_Rect rect = {.x = y * CELL_SIZE,
-                     .y = x * CELL_SIZE,
-                     .w = CELL_SIZE,
-                     .h = CELL_SIZE};
-    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b,
-                           color.a);
-    SDL_RenderFillRect(renderer, &rect);
-}
+void draw_map(void) {
+    if (!renderer) return;
 
-const SDL_Color YELLOW = {255, 255, 0, 255};  // Atanmış survivor
-
-void draw_drones() {
-    for (int i = 0; i < num_drones; i++) {
-        pthread_mutex_lock(&drone_fleet[i].lock);
-
-        SDL_Color color = (drone_fleet[i].status == IDLE) ? BLUE : GREEN;
-        draw_cell(drone_fleet[i].coord.x, drone_fleet[i].coord.y, color);
-
-        // Draw mission line if on mission
-        if (drone_fleet[i].status == ON_MISSION) {
-            SDL_SetRenderDrawColor(renderer, GREEN.r, GREEN.g, GREEN.b, GREEN.a);
-            SDL_RenderDrawLine(renderer,
-                drone_fleet[i].coord.y * CELL_SIZE + CELL_SIZE / 2,
-                drone_fleet[i].coord.x * CELL_SIZE + CELL_SIZE / 2,
-                drone_fleet[i].target.y * CELL_SIZE + CELL_SIZE / 2,
-                drone_fleet[i].target.x * CELL_SIZE + CELL_SIZE / 2);
-        }
-
-        pthread_mutex_unlock(&drone_fleet[i].lock);
-    }
-}
-
-void draw_survivors() {
-    for (int i = 0; i < map.height; i++) {
-        for (int j = 0; j < map.width; j++) {
-            pthread_mutex_lock(&map.cells[i][j].survivors->lock);
-
-            if (map.cells[i][j].survivors->number_of_elements > 0) {
-                int assigned = 0;
-
-                // Check if any drone has this cell as its target
-                for (int k = 0; k < num_drones; k++) {
-                    pthread_mutex_lock(&drone_fleet[k].lock);
-                    if (drone_fleet[k].status == ON_MISSION &&
-                        drone_fleet[k].target.x == i &&
-                        drone_fleet[k].target.y == j) {
-                        assigned = 1;
-                    }
-                    pthread_mutex_unlock(&drone_fleet[k].lock);
-                    if (assigned) break;
-                }
-
-                if (assigned) {
-                    draw_cell(i, j, YELLOW);  // Survivor is assigned
-                } else {
-                    draw_cell(i, j, RED);     // Waiting for help
-                }
-            }
-
-            pthread_mutex_unlock(&map.cells[i][j].survivors->lock);
-        }
-    }
-}
-
-
-void draw_grid() {
-    SDL_SetRenderDrawColor(renderer, WHITE.r, WHITE.g, WHITE.b,
-                           WHITE.a);
-    for (int i = 0; i <= map.height; i++) {
-        SDL_RenderDrawLine(renderer, 0, i * CELL_SIZE, window_width,
-                           i * CELL_SIZE);
-    }
-    for (int j = 0; j <= map.width; j++) {
-        SDL_RenderDrawLine(renderer, j * CELL_SIZE, 0, j * CELL_SIZE,
-                           window_height);
-    }
-}
-
-int draw_map() {
-    SDL_SetRenderDrawColor(renderer, BLACK.r, BLACK.g, BLACK.b,
-                           BLACK.a);
+    // Ekranı temizle
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
 
-    draw_survivors();
-    draw_drones();
-    draw_grid();
+    // Izgara çiz
+    SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255);
+    for (int i = 0; i <= 20; i++) {
+        SDL_RenderDrawLine(renderer, 
+                          0, i * (600/20),
+                          800, i * (600/20));
+        SDL_RenderDrawLine(renderer,
+                          i * (800/20), 0,
+                          i * (800/20), 600);
+    }
+
+    // Drone'ları çiz
+    if (drones) {
+        SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+        Node *current = drones->head;
+        while (current != NULL && current->occupied) {
+            Drone *d = (Drone *)current->data;
+            if (d) {
+                // Drone durumuna göre renk seç
+                switch (d->status) {
+                    case IDLE:
+                        SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255); // Yeşil
+                        break;
+                    case ON_MISSION:
+                        SDL_SetRenderDrawColor(renderer, 255, 165, 0, 255); // Turuncu
+                        break;
+                    case DISCONNECTED:
+                        SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255); // Kırmızı
+                        break;
+                }
+
+                SDL_Rect droneRect = {
+                    d->coord.x * (800/20),
+                    d->coord.y * (600/20),
+                    10, 10
+                };
+                SDL_RenderFillRect(renderer, &droneRect);
+
+                // Hedef konumu göster (eğer görevdeyse)
+                if (d->status == ON_MISSION) {
+                    SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255); // Sarı
+                    SDL_RenderDrawLine(renderer,
+                        d->coord.x * (800/20) + 5,
+                        d->coord.y * (600/20) + 5,
+                        d->target.x * (800/20) + 5,
+                        d->target.y * (600/20) + 5
+                    );
+                }
+
+                // Pil seviyesini göster
+                SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+                SDL_Rect batteryRect = {
+                    d->coord.x * (800/20),
+                    d->coord.y * (600/20) - 5,
+                    (d->battery_level / 100.0f) * 10,
+                    3
+                };
+                SDL_RenderFillRect(renderer, &batteryRect);
+            }
+            current = current->next;
+        }
+    }
+
+    // Survivor'ları çiz
+    if (survivors) {
+        Node *current = survivors->head;
+        while (current != NULL && current->occupied) {
+            Survivor *s = (Survivor *)current->data;
+            if (s) {
+                // Survivor durumuna göre renk seç
+                switch (s->status) {
+                    case 0: // Kurtarılmamış
+                        SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+                        break;
+                    case 1: // Kurtarılmış
+                        SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
+                        break;
+                    default:
+                        SDL_SetRenderDrawColor(renderer, 128, 128, 128, 255);
+                }
+
+                SDL_Rect survivorRect = {
+                    s->coord.x * (800/20),
+                    s->coord.y * (600/20),
+                    8, 8
+                };
+                SDL_RenderFillRect(renderer, &survivorRect);
+            }
+            current = current->next;
+        }
+    }
 
     SDL_RenderPresent(renderer);
-    return 0;
 }
 
-int check_events() {
+void cleanup_sdl(void) {
+    if (renderer) {
+        SDL_DestroyRenderer(renderer);
+        renderer = NULL;
+    }
+    if (window) {
+        SDL_DestroyWindow(window);
+        window = NULL;
+    }
+    SDL_Quit();
+}
+
+int check_events(void) {
+    SDL_Event event;
     while (SDL_PollEvent(&event)) {
-        if (event.type == SDL_QUIT) return 1;
-        if (event.type == SDL_KEYDOWN &&
-            event.key.keysym.sym == SDLK_ESCAPE)
+        if (event.type == SDL_QUIT) {
+            should_quit = 1;
             return 1;
+        }
     }
     return 0;
 }
 
-void quit_all() {
-    if (renderer) SDL_DestroyRenderer(renderer);
-    if (window) SDL_DestroyWindow(window);
-    SDL_Quit();
+void quit_program(void) {
+    should_quit = 1;
+    cleanup_sdl();
+    exit(0);
 }

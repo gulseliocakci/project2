@@ -1,94 +1,129 @@
 #include "headers/drone.h"
 #include "headers/globals.h"
+#include "headers/map.h"
+#include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <pthread.h>
-#include <unistd.h>
-#include <string.h>
-#include <time.h>
-#include "headers/map.h"
-#include "headers/list.h"
-
-
-
-// Global drone fleet
-Drone *drone_fleet = NULL;
-int num_drones = 10; // Default fleet size
-
-void initialize_drones() {
-    drone_fleet = malloc(sizeof(Drone) * num_drones);
-    srand(time(NULL));
-
-    for (int i = 0; i < num_drones; i++) {
-        drone_fleet[i].id = i;
-        drone_fleet[i].status = IDLE;
-        drone_fleet[i].coord = (Coord){rand() % map.width, rand() % map.height};
-        drone_fleet[i].target = drone_fleet[i].coord; // Initial target=current position
-        pthread_mutex_init(&drone_fleet[i].lock, NULL);
-        pthread_cond_init(&drone_fleet[i].mission_cond, NULL);
-
-        pthread_mutex_lock(&drones->lock);
-        drones->add(drones, &drone_fleet[i]); 
-        pthread_mutex_unlock(&drones->lock);
-
-        pthread_create(&drone_fleet[i].thread_id, NULL, drone_behavior, &drone_fleet[i]);
-    }
-}
-
-
-void* send_heartbeat(void* arg) {
-    Drone *d = (Drone*)arg;
-
-    while (1) {
-        pthread_mutex_lock(&d->lock);
-        if (d->status != DISCONNECTED) {
-            printf("Drone %d sending heartbeat.\n", d->id);
-            // Simulates sending heartbeat to server
-        }
-        pthread_mutex_unlock(&d->lock);
-        sleep(5); // Her 5 saniyede bir gönder
-    }
-    return NULL;
-}
+#include <math.h>
 
 void* drone_behavior(void *arg) {
-    Drone *d = (Drone*)arg;
-
-    pthread_t heartbeat_thread;
-    pthread_create(&heartbeat_thread, NULL, send_heartbeat, d);
-
+    Drone *drone = (Drone *)arg;
+    struct timespec sleep_time = {0, 500000000}; // 500ms = 500,000,000 nanoseconds
     while (1) {
-        pthread_mutex_lock(&d->lock);
-
-        while (d->status == IDLE) {
-            pthread_cond_wait(&d->mission_cond, &d->lock);
+        pthread_mutex_lock(&drone->lock);
+        
+        while (drone->status == IDLE) {
+            pthread_cond_wait(&drone->mission_cond, &drone->lock);
         }
-
-        if (d->status == ON_MISSION) {
-            if (d->coord.x < d->target.x) d->coord.x++;
-            else if (d->coord.x > d->target.x) d->coord.x--;
-
-            if (d->coord.y < d->target.y) d->coord.y++;
-            else if (d->coord.y > d->target.y) d->coord.y--;
-
-            if (d->coord.x == d->target.x && d->coord.y == d->target.y) {
-                d->status = IDLE;
-                printf("Drone %d: Mission completed!\n", d->id);
+        
+        if (drone->status == ON_MISSION) {
+            // Hedefe doğru hareket et
+            int dx = drone->target.x - drone->coord.x;
+            int dy = drone->target.y - drone->coord.y;
+            
+            if (dx != 0 || dy != 0) {
+                // Basit hareket algoritması
+                if (dx != 0) {
+                    drone->coord.x += (dx > 0) ? 1 : -1;
+                }
+                if (dy != 0) {
+                    drone->coord.y += (dy > 0) ? 1 : -1;
+                }
+                
+                // Pil seviyesini azalt
+                drone->battery_level = fmax(0, drone->battery_level - 1);
+            } else {
+                // Hedefe ulaşıldı
+                drone->status = IDLE;
             }
         }
-
-        pthread_mutex_unlock(&d->lock);
-        sleep(1);
+        
+        pthread_mutex_unlock(&drone->lock);
+        nanosleep(&sleep_time, NULL);
     }
-    pthread_join(heartbeat_thread, NULL);
+    
     return NULL;
 }
 
 void cleanup_drones() {
-    for (int i = 0; i < num_drones; i++) {
-        pthread_cancel(drone_fleet[i].thread_id);
-        pthread_mutex_destroy(&drone_fleet[i].lock);
-        pthread_cond_destroy(&drone_fleet[i].mission_cond);
+    if (drone_fleet) {
+        for (int i = 0; i < num_drones; i++) {
+            pthread_mutex_destroy(&drone_fleet[i].lock);
+            pthread_cond_destroy(&drone_fleet[i].mission_cond);
+        }
+        free(drone_fleet);
+        drone_fleet = NULL;
     }
-    free(drone_fleet);
+}
+
+void initialize_drones() {
+    // drone_fleet için bellek ayır
+    drone_fleet = (Drone *)malloc(sizeof(Drone) * num_drones);
+    if (!drone_fleet) {
+        fprintf(stderr, "Failed to allocate memory for drone fleet\n");
+        return;
+    }
+
+    // Her drone'u başlat
+    for (int i = 0; i < num_drones; i++) {
+        drone_fleet[i].id = i + 1;
+        drone_fleet[i].status = IDLE;
+        drone_fleet[i].battery_level = 100;
+        drone_fleet[i].speed = 1.0;
+        
+        // Random başlangıç konumu ata
+        drone_fleet[i].coord.x = rand() % map.width;
+        drone_fleet[i].coord.y = rand() % map.height;
+        drone_fleet[i].target = drone_fleet[i].coord;  // Başlangıçta hedef = mevcut konum
+        
+        // Thread sync nesnelerini başlat
+        pthread_mutex_init(&drone_fleet[i].lock, NULL);
+        pthread_cond_init(&drone_fleet[i].mission_cond, NULL);
+        
+        // Drone'u listeye ekle
+        drones->add(drones, &drone_fleet[i]);
+        
+        // Drone thread'ini başlat
+        pthread_create(&drone_fleet[i].thread_id, NULL, drone_behavior, &drone_fleet[i]);
+    }
+}
+
+void assign_mission(Drone *d, Coord target) {
+    pthread_mutex_lock(&d->lock);
+    
+    d->target = target;
+    d->status = ON_MISSION;
+    
+    pthread_cond_signal(&d->mission_cond);
+    pthread_mutex_unlock(&d->lock);
+}
+
+int get_battery_level(Drone *d) {
+    int level;
+    pthread_mutex_lock(&d->lock);
+    level = d->battery_level;
+    pthread_mutex_unlock(&d->lock);
+    return level;
+}
+
+void set_drone_speed(Drone *d, float speed) {
+    pthread_mutex_lock(&d->lock);
+    d->speed = speed;
+    pthread_mutex_unlock(&d->lock);
+}
+
+void* send_heartbeat(void* arg) {
+    Drone *d = (Drone*)arg;
+    
+    while (1) {
+        pthread_mutex_lock(&d->lock);
+        time_t now;
+        time(&now);
+        localtime_r(&now, &d->last_update);
+        pthread_mutex_unlock(&d->lock);
+        
+        sleep(1); // Her saniye heartbeat gönder
+    }
+    
+    return NULL;
 }

@@ -11,4 +11,7 @@ extern List *survivors, *helpedsurvivors, *drones;
 extern Map map;
 extern Drone *drone_fleet; // Global drone fleet
 extern int num_drones; // Drone sayısı
+
+
 #endif
+

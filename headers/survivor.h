@@ -15,5 +15,8 @@ typedef struct survivor {
 // Functions
 Survivor* create_survivor(Coord *coord, char *info, struct tm *discovery_time);
 void *survivor_generator(void *args);
+void update_survivor_status(Survivor *s, int new_status);
+int calculate_help_time(Survivor *s);
+void survivor_cleanup(Survivor *s);
 
 #endif

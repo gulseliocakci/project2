@@ -22,15 +22,17 @@ typedef struct drone {
     struct tm last_update;      // Son güncelleme zamanı
     pthread_mutex_t lock;       // Drone için mutex
     pthread_cond_t mission_cond;// Görev beklemek için condition variable
+    int battery_level;          // Pil seviyesi (0-100)
+    float speed;         // drone hizi 
 } Drone;
 
-// Yeni eklenen fonksiyonlar için tanımlamalar
-void* send_heartbeat(void* arg); // Heartbeat gönderimi
-void assign_mission(Drone *d, Coord target);
-void cleanup_drones();
-
-// Functions
-void initialize_drones();
+// Drone yönetim fonksiyonları
 void* drone_behavior(void *arg);
+void cleanup_drones(void);
+void initialize_drones(void);
+void assign_mission(Drone *d, Coord target);
+int get_battery_level(Drone *d);
+void set_drone_speed(Drone *d, float speed);
+void* send_heartbeat(void *arg);
 
 #endif
