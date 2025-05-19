@@ -1,73 +1,52 @@
 #include "headers/ai.h"
 #include "headers/globals.h"
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <math.h>
 #include <unistd.h>
+#include "headers/view.h"
 
-// Yardımcı fonksiyonlar
-Drone* find_closest_idle_drone(Coord target) {
-    Drone *closest = NULL;
-    double min_distance = -1;
-
-    pthread_mutex_lock(&drones->lock);
-    Node *curr = drones->head;
+void* ai_controller(void* arg) {
+    (void)arg;
     
-    while (curr != NULL) {
-        Drone *d = (Drone *)curr->data;
-        pthread_mutex_lock(&d->lock);
-        
-        if (d->status == IDLE) {
-            double dist = sqrt(pow(d->coord.x - target.x, 2) + 
-                             pow(d->coord.y - target.y, 2));
-            
-            if (min_distance < 0 || dist < min_distance) {
-                min_distance = dist;
-                closest = d;
+    while (!should_quit) {
+        if (!survivors || !drones) continue;
+
+        // Survivor listesini kontrol et
+        Node* survivor_node = survivors->head;
+        while (survivor_node && survivor_node->occupied) {
+            Survivor* s = (Survivor*)survivor_node->data;
+            if (s && s->status == 0) { // Kurtarılmamış survivor
+                // En yakın boşta olan drone'u bul
+                Node* drone_node = drones->head;
+                Drone* closest_drone = NULL;
+                float min_distance = INFINITY;
+
+                while (drone_node && drone_node->occupied) {
+                    Drone* d = (Drone*)drone_node->data;
+                    if (d && d->status == IDLE && d->battery_level > 20) {
+                        float dist = sqrt(pow(d->coord.x - s->coord.x, 2) + 
+                                       pow(d->coord.y - s->coord.y, 2));
+                        if (dist < min_distance) {
+                            min_distance = dist;
+                            closest_drone = d;
+                        }
+                    }
+                    drone_node = drone_node->next;
+                }
+
+                // Uygun drone bulunduysa görevi ata
+                if (closest_drone) {
+                    pthread_mutex_lock(&closest_drone->lock);
+                    closest_drone->target = s->coord;
+                    closest_drone->status = ON_MISSION;
+                    pthread_cond_signal(&closest_drone->mission_cond);
+                    pthread_mutex_unlock(&closest_drone->lock);
+                }
             }
+            survivor_node = survivor_node->next;
         }
-        
-        pthread_mutex_unlock(&d->lock);
-        curr = curr->next;
-    }
-    
-    pthread_mutex_unlock(&drones->lock);
-    return closest;
-}
-
-void *ai_controller(void *arg) {
-    (void)arg;  // Kullanılmayan parametre uyarısını engelle
-    
-    while (1) {
-        Survivor *s = NULL;
-
-        pthread_mutex_lock(&survivors->lock);
-        s = survivors->peek(survivors);
-        
-        if (s) {
-            pthread_mutex_unlock(&survivors->lock);
-
-            // En yakın boştaki drone'u bul
-            Drone *closest = find_closest_idle_drone(s->coord);
-            if (closest) {
-                // Görevi drone'a ata
-                assign_mission(closest, s->coord);
-
-                printf("Drone %d assigned to survivor at (%d, %d)\n", 
-                       closest->id, s->coord.x, s->coord.y);
-
-                pthread_mutex_lock(&survivors->lock);
-                survivors->removedata(survivors, s);
-                update_survivor_status(s, 1);
-                pthread_mutex_unlock(&survivors->lock);
-
-                printf("Survivor %s being helped by Drone %d\n", s->info, closest->id);
-            }
-        } else {
-            pthread_mutex_unlock(&survivors->lock);
-        }
-
-        sleep(1);
+        usleep(100000); // 100ms bekle
     }
     return NULL;
 }

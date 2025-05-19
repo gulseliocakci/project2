@@ -21,7 +21,7 @@ extern ViewColors colors;
 
 extern SDL_Window *window;
 extern SDL_Renderer *renderer;
-extern volatile int should_quit;
+//extern volatile int should_quit;
 
 extern int init_sdl_window();
 extern void draw_cell(int x, int y, SDL_Color color);
