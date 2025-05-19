@@ -1,0 +1,77 @@
+Emergency Drone Coordination System – Genel Proje Özeti
+
+1. Proje Amacı ve Kapsamı
+Bu proje, afet senaryolarında insansız hava araçlarının (drone) merkezi bir sunucu ile koordineli olarak “hayatta kalanları” bulup kurtarmasını simüle eden bir istemci-sunucu (client-server) sistemdir.
+Dronelar ve hayatta kalanlar harita üzerinde hareket eder; iletişim ve görev atamaları gerçek zamanlı olarak socket ve çoklu thread kullanılarak gerçekleştirilir.
+
+2. Temel Bileşenler
+
+Sunucu (Server)
+- Çoklu drone bağlantısı kabul eder ve her bir drone için ayrı thread açar.
+- Aktif dronelar ve yardıma muhtaç kişileri thread-safe listelerde tutar.
+- Bağlantısı kopan drone’ların görevlerini başka dronelara devreder.
+- AI Controller ile en uygun drone’u en eski yardım bekleyen survivora atar.
+
+Drone (İstemci)
+- Sunucuya TCP üzerinden bağlanır, düzenli olarak konum ve durum bilgisi yollar.
+- Sunucudan gelen görevleri alır ve belirtilen koordinata hareket eder.
+- Görev tamamlandığında durumu tekrar sunucuya bildirir.
+
+Simülasyon & Görselleştirme
+- controller.c ve view.c dosyalarında SDL kullanılarak harita, drone ve survivor hareketleri gerçek zamanlı görselleştirilir.
+- Her drone ve survivor ayrı thread ile yönetilir.
+
+Veri Yapıları & Senkronizasyon
+- list.c/h: Survivor ve drone nesneleri, mutex ile korunan dinamik listelerde tutulur.
+- Thread güvenliği için tüm ekleme/çıkarma işlemleri mutex ile korunur.
+
+3. Koddan Örnekler & Çalışma Mantığı
+
+Sunucuya Bağlanan Drone (drone_client.c)
+int sock = socket(AF_INET, SOCK_STREAM, 0);
+connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr));
+while (1) {
+    DroneStatus status = {.x = 0, .y = 0, .status = IDLE};
+    send(sock, &status, sizeof(status), 0);
+    Coord target;
+    recv(sock, &target, sizeof(target), 0);
+    // hedefe yönelme mantığı burada...
+    sleep(1);
+}
+
+Sunucu: Her Drone İçin Thread Açma & Bağlantı Yönetimi (server.c)
+while (1) {
+    int* client_socket = malloc(sizeof(int));
+    *client_socket = accept(server_socket, (struct sockaddr*)&client_addr, &client_len);
+    pthread_t thread_id;
+    pthread_create(&thread_id, NULL, handle_drone, (void*)client_socket);
+    pthread_detach(thread_id);
+}
+
+AI Controller: Görev Atama ve Yeniden Atama
+// Bağlantısı kopan drone'un görevi başka idle drone'a atanır
+void handle_disconnected_drone(int disconnected_drone_id) {
+    // ...mission reassignment...
+}
+
+Simülasyonun Başlatılması (controller.c)
+survivors = create_list(sizeof(Survivor), 1000);
+drones = create_list(sizeof(Drone), 100);
+initialize_drones();
+pthread_create(&survivor_thread, NULL, survivor_generator, NULL);
+pthread_create(&ai_thread, NULL, ai_controller, NULL);
+// SDL ile görselleştirme başlatılır
+
+4. Test ve Performans
+- drone_simulation.c dosyasındaki kodlarla çoklu drone ile yük testi yapılır, başarılı/başarısız bağlantılar ve mesaj sayısı raporlanır.
+- Thread güvenliği için Valgrind gibi araçlarla test yapılmalı.
+- Performans analizi: tamamlanan görevler, bağlantı süreleri ve drone verimliliği.
+
+5. Geliştirilebilir Noktalar
+- Bağlantı kopmaları sonrası görev devri ve hata toleransı daha da geliştirilebilir.
+- İleri seviyede web tabanlı veya mobil görselleştirme eklenebilir.
+- Görev önceliği (ör. kritik durumdaki survivorları önceleme) gibi algoritmik geliştirmeler yapılabilir.
+
+6. Sonuç
+Proje, thread-safe veri yapıları ve socket tabanlı istemci-sunucu mimarisiyle modern, ölçeklenebilir bir kurtarma drone yönetim sistemi örneği sunar.
+Harita üzerinde canlı görselleştirme, gerçek zamanlı görev atama ve yük testleriyle hem akademik hem de gerçek dünya problemlerine uygun bir modeldir.
