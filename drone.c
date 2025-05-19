@@ -20,31 +20,36 @@ void* drone_behavior(void* arg) {
 
         if (should_quit) break;
 
-        // Hedefe doğru hareket et
         while (drone->status == ON_MISSION && !should_quit) {
             pthread_mutex_lock(&drone->lock);
             
             // Pil seviyesini güncelle
             drone->battery_level -= 1;
             if (drone->battery_level <= 20) {
+                printf("Drone %d: Düşük pil seviyesi (%d)\n", drone->id, drone->battery_level);
                 drone->status = IDLE;
                 pthread_mutex_unlock(&drone->lock);
                 continue;
             }
 
             // Hedefe doğru hareket
-            float dx = drone->target.x - drone->coord.x;
-            float dy = drone->target.y - drone->coord.y;
-            float distance = sqrt(dx*dx + dy*dy);
-
-            if (distance < 0.1) { // Hedefe ulaşıldı
+            int dx = drone->target.x - drone->coord.x;
+            int dy = drone->target.y - drone->coord.y;
+            
+            // Eğer hem x hem y koordinatı hedefle aynıysa, hedefe ulaşılmış demektir
+            if (dx == 0 && dy == 0) {
+                printf("Drone %d: Hedefe ulaştı! (%d, %d)\n", 
+                       drone->id, drone->coord.x, drone->coord.y);
+                
                 // Survivor'ı güncelle
                 Node* survivor_node = survivors->head;
                 while (survivor_node && survivor_node->occupied) {
                     Survivor* s = (Survivor*)survivor_node->data;
                     if (s && s->coord.x == drone->target.x && 
                         s->coord.y == drone->target.y && 
-                        (s->status == 0 || s->status == 2)) {  // Bekleyen veya atanmış survivor
+                        (s->status == 0 || s->status == 2)) {
+                        
+                        printf("Drone %d: Survivor kurtarıldı!\n", drone->id);
                         s->status = 1; // Kurtarıldı
                         time_t current_time;
                         time(&current_time);
@@ -55,13 +60,12 @@ void* drone_behavior(void* arg) {
                 }
                 drone->status = IDLE;
             } else {
-                // Drone hızına göre hareket
-                float step = drone->speed * 0.1; // 100ms için
-                if (step > distance) step = distance;
-                float ratio = step / distance;
+                // Her adımda x ve y koordinatlarını birer birim hedefe doğru hareket ettir
+                if (dx > 0) drone->coord.x += 1;
+                else if (dx < 0) drone->coord.x -= 1;
                 
-                drone->coord.x += dx * ratio;
-                drone->coord.y += dy * ratio;
+                if (dy > 0) drone->coord.y += 1;
+                else if (dy < 0) drone->coord.y -= 1;
             }
             
             pthread_mutex_unlock(&drone->lock);

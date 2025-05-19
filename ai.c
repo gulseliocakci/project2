@@ -89,13 +89,14 @@ void* ai_controller(void* arg) {
                 d->target = s->coord;
                 d->status = ON_MISSION;
                 s->status = 2; // Drone atandı
+                printf("AI: Drone %d -> Survivor (%d, %d), Mesafe: %.2f\n", 
+                d->id, s->coord.x, s->coord.y, assignments[i].distance);
                 pthread_cond_signal(&d->mission_cond);
                 pthread_mutex_unlock(&d->lock);
 
-                // Bu drone ve survivor'ı atanmış olarak işaretle
-                assigned_drones[drone_id] = 1;
-                assigned_survivors[survivor_id] = 1;
-            }
+                 assigned_drones[drone_id] = 1;
+                 assigned_survivors[survivor_id] = 1;
+                }
         }
 
         usleep(100000); // 100ms bekle
