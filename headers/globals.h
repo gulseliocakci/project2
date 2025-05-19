@@ -13,5 +13,7 @@ extern Drone *drone_fleet; // Global drone fleet
 extern int num_drones; // Drone sayısı
 extern volatile int should_quit;
 
+
+
 #endif
 

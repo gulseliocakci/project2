@@ -9,8 +9,8 @@
 #include "headers/list.h"
 
 // Global değişkenlerin tanımı (sadece test.c için)
-List *drones = NULL;
-List *survivors = NULL;
+//List *drones = NULL;
+//List *survivors = NULL;
 volatile int should_quit = 0;
 
 // Fonksiyon prototipleri
