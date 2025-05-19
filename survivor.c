@@ -29,7 +29,7 @@ void* survivor_generator(void* arg) {
                 survivors->add(survivors, s);
             }
         }
-        sleep(rand() % 5 + 5); // 5-10 saniye arası bekle
+        sleep(rand() % 10 + 10); // 10-20 saniye arası bekle
     }
     return NULL;
 }

@@ -9,7 +9,6 @@
 #include <stdio.h>
 //List *survivors, *helpedsurvivors, *drones;
 
-
 int main() {
     // Initialize global listss
     survivors = create_list(sizeof(Survivor), 1000);     // Survivors waiting for help
@@ -42,6 +41,6 @@ int main() {
     survivors->destroy(survivors);
     helpedsurvivors->destroy(helpedsurvivors);
     drones->destroy(drones);
-    quit_all();
+    quit_program();
     return 0;
 }
