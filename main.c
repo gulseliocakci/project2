@@ -3,27 +3,39 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <stdbool.h>
 #include <unistd.h>
 #include <signal.h>
+#include <SDL2/SDL.h>
 #include "headers/ai.h"
+#include "headers/globals.h"
+#include "headers/server.h"
+#include "headers/mission.h"
 #include "headers/view.h"
 #include "headers/map.h"
-#include "headers/globals.h"
 
-pthread_t visualization_thread, ai_thread;
-volatile int should_quit = 0;
+#define _XOPEN_SOURCE 
+#define _GNU_SOURCE
 
+pthread_t visualization_thread, ai_thread, server_thread, survivor_generator_thread;
+
+// Cleanup fonksiyonu
 void cleanup(void) {
     printf("Starting cleanup...\n");
     should_quit = 1;
 
     pthread_cancel(visualization_thread);
     pthread_cancel(ai_thread);
+    pthread_cancel(server_thread);
+    pthread_cancel(survivor_generator_thread);
 
     pthread_join(visualization_thread, NULL);
     pthread_join(ai_thread, NULL);
+    pthread_join(server_thread, NULL);
+    pthread_join(survivor_generator_thread, NULL);
     
     cleanup_sdl();
+    cleanup_drones();
 
     if (survivors) {
         survivors->destroy(survivors);
@@ -36,11 +48,13 @@ void cleanup(void) {
     freemap();
 }
 
+// Sinyal işleme
 void handle_signal(int sig) {
     printf("\nReceived signal %d, initiating shutdown...\n", sig);
     quit_program();
 }
 
+// Görselleştirme thread'i
 void *start_visualization(void *arg) {
     (void)arg;
     
@@ -65,6 +79,7 @@ void *start_visualization(void *arg) {
 }
 
 int main(int argc, char *argv[]) {
+    // Sinyal işleyicileri ayarla
     signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
 
@@ -92,15 +107,35 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // Tarih formatı kontrolü (YYYY-MM-DD HH:MM:SS)
-    struct tm tm;
-    if (strptime(date_time, "%Y-%m-%d %H:%M:%S", &tm) == NULL) {
+    // Tarih ve zamanı ayrıştır
+    int year, month, day, hour, min, sec;
+    if (sscanf(date_time, "%d-%d-%d %d:%d:%d", 
+               &year, &month, &day, &hour, &min, &sec) != 6) {
         fprintf(stderr, "Invalid date format. Use: YYYY-MM-DD HH:MM:SS\n");
         return 1;
     }
 
+    // Unix timestamp'e çevir
+    int days_since_epoch = (year - 1970) * 365 + day;
+    int days_in_month[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    for (int i = 0; i < month - 1; i++) {
+        days_since_epoch += days_in_month[i];
+    }
+    days_since_epoch += (year - 1969) / 4;
+
+    current_time = (time_t)(
+        days_since_epoch * 24 * 60 * 60 +  // günleri saniyeye çevir
+        hour * 60 * 60 +                   // saatleri saniyeye çevir
+        min * 60 +                         // dakikaları saniyeye çevir
+        sec                                // saniyeleri ekle
+    );
+
+    // Kullanıcı adını kaydet
+    strncpy(current_user, username, sizeof(current_user) - 1);
+    current_user[sizeof(current_user) - 1] = '\0';
+
     // Başlangıç mesajlarını yazdır
-    printf("Current Date and Time (UTC): %s\n", date_time);
+    printf("Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): %s\n", date_time);
     printf("Current User's Login: %s\n", username);
 
     // Listeleri oluştur
@@ -118,8 +153,10 @@ int main(int argc, char *argv[]) {
     }
 
     // Haritayı başlat
-    init_map(20, 20);  // void fonksiyon olduğu için kontrol etmiyoruz
-    printf("Map initialized: 20x20\n");
+    init_map(20, 20);
+    
+    // Drone'ları başlat
+    initialize_drones();
 
     // Thread'leri oluştur
     if (pthread_create(&visualization_thread, NULL, start_visualization, NULL) != 0) {
@@ -134,12 +171,25 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    if (pthread_create(&server_thread, NULL, (void*)start_drone_server, NULL) != 0) {
+        fprintf(stderr, "Failed to create server thread\n");
+        cleanup();
+        return 1;
+    }
+
+    if (pthread_create(&survivor_generator_thread, NULL, survivor_generator, NULL) != 0) {
+        fprintf(stderr, "Failed to create survivor generator thread\n");
+        cleanup();
+        return 1;
+    }
+
+    printf("Server started. Waiting for drone connections...\n");
+
     // Ana döngü
     while (!should_quit) {
         sleep(1);
     }
 
-    // Temiz bir şekilde kapat
     cleanup();
     return 0;
 }

@@ -4,6 +4,8 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
 #include <time.h>
 #include "headers/server.h"
 #include "headers/mission.h"
@@ -12,24 +14,17 @@
 #include "headers/list.h"
 #include "headers/globals.h"
 
-#define TIMEOUT_THRESHOLD 10 // 10 saniyelik timeout
-#define MAX_MISSED_HEARTBEATS 3 // Maksimum izin verilen kaçırılan heartbeat sayısı
-
-List *survivors;
-
-Mission mission_list[MAX_MISSIONS];
-int mission_list_size = 0;
-
-Map map = {100, 100, NULL}; // Varsayılan olarak 100x100 boyutunda bir harita
-List *drones = NULL; // Drone listesi
-pthread_mutex_t drones_lock = PTHREAD_MUTEX_INITIALIZER;
-
 typedef struct {
     int missed_heartbeats;
     time_t last_heartbeat_time;
 } DroneHeartbeatStatus;
 
-DroneHeartbeatStatus heartbeat_status[MAX_DRONES];
+static DroneHeartbeatStatus heartbeat_status[MAX_DRONES];
+static pthread_mutex_t drones_lock = PTHREAD_MUTEX_INITIALIZER;
+
+// extern değişkenler mission.h'dan geliyor
+Mission mission_list[MAX_MISSIONS];
+int mission_list_size = 0;
 
 void handle_heartbeat(int drone_id) {
     pthread_mutex_lock(&drones_lock);
@@ -54,19 +49,19 @@ void check_drone_timeouts() {
 }
 
 void* monitor_heartbeats(void* arg) {
-    while (1) {
+    while (!should_quit) {
         check_drone_timeouts();
-        sleep(1); // Her saniye kontrol et
+        sleep(1);
     }
+    return NULL;
 }
 
 void* handle_drone(void* arg) {
     int drone_fd = *(int*)arg;
     free(arg);
     char buffer[1024];
-    time_t last_message_time = time(NULL);
 
-    while (1) {
+    while (!should_quit) {
         memset(buffer, 0, sizeof(buffer));
         int bytes_read = read(drone_fd, buffer, sizeof(buffer));
 
@@ -89,11 +84,14 @@ void* handle_drone(void* arg) {
             return NULL;
         }
 
-        last_message_time = time(NULL);
         printf("Received: %s\n", buffer);
+
+        // JSON mesajını parse et
+        // ... (JSON işleme kodları buraya gelecek)
 
         usleep(100000);
     }
+    return NULL;
 }
 
 void handle_disconnected_drone(int disconnected_drone_id) {
@@ -118,57 +116,64 @@ void handle_disconnected_drone(int disconnected_drone_id) {
     pthread_mutex_unlock(&drones_lock);
 }
 
-int main() {
-    drones = create_list(sizeof(Drone), MAX_DRONES);
+void start_drone_server(void) {
+    int server_fd;
+    struct sockaddr_in address;
+    int opt = 1;
 
-    survivors = create_list(sizeof(Survivor), 1000);
-    init_map(40, 30);
-    
+    // Soket oluştur
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        perror("Socket creation failed");
+        return;
+    }
+
+    // Socket seçeneklerini ayarla
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
+        perror("setsockopt failed");
+        return;
+    }
+
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(SERVER_PORT);
+
+    // Bind
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        perror("Bind failed");
+        return;
+    }
+
+    // Listen
+    if (listen(server_fd, 10) < 0) {
+        perror("Listen failed");
+        return;
+    }
+
+    printf("Server listening on port %d\n", SERVER_PORT);
+
+    // Heartbeat monitor thread'ini başlat
     pthread_t heartbeat_thread;
     pthread_create(&heartbeat_thread, NULL, monitor_heartbeats, NULL);
 
-    int server_socket;
-    struct sockaddr_in server_addr;
-
-    server_socket = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_socket == 0) {
-        perror("Socket creation failed");
-        exit(EXIT_FAILURE);
-    }
-
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(8080);
-
-    if (bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-        perror("Bind failed");
-        exit(EXIT_FAILURE);
-    }
-
-    if (listen(server_socket, 50) < 0) {
-        perror("Listen failed");
-        exit(EXIT_FAILURE);
-    }
-
-    printf("Server listening on port 8080...\n");
-
-    while (1) {
+    while (!should_quit) {
         struct sockaddr_in client_addr;
         socklen_t client_len = sizeof(client_addr);
-        int* client_socket = malloc(sizeof(int));
-        *client_socket = accept(server_socket, (struct sockaddr*)&client_addr, &client_len);
-
-        if (*client_socket < 0) {
+        
+        int *client_sock = malloc(sizeof(int));
+        *client_sock = accept(server_fd, (struct sockaddr *)&client_addr, &client_len);
+        
+        if (*client_sock < 0) {
             perror("Accept failed");
-            free(client_socket);
+            free(client_sock);
             continue;
         }
 
         pthread_t thread_id;
-        pthread_create(&thread_id, NULL, handle_drone, (void*)client_socket);
+        pthread_create(&thread_id, NULL, handle_drone, client_sock);
         pthread_detach(thread_id);
     }
 
+    pthread_cancel(heartbeat_thread);
     pthread_join(heartbeat_thread, NULL);
-    return 0;
+    close(server_fd);
 }

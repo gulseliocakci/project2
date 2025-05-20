@@ -1,6 +1,10 @@
 #include "headers/globals.h"
 
 
+time_t current_time;  // Global zaman değişkeni
+char current_user[256];  // Mevcut kullanıcı
+
+
 List *survivors = NULL;
 List *helpedsurvivors = NULL;
 List *drones = NULL;

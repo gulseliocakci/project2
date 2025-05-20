@@ -9,7 +9,7 @@
 #include <stdio.h>
 //List *survivors, *helpedsurvivors, *drones;
 
-int main() {
+int controller_main() {
     // Initialize global listss
     survivors = create_list(sizeof(Survivor), 1000);     // Survivors waiting for help
     helpedsurvivors = create_list(sizeof(Survivor), 1000); // Helped survivors

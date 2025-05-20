@@ -20,7 +20,7 @@ int init_sdl_window(void) {
                             SDL_WINDOWPOS_UNDEFINED,
                             SDL_WINDOWPOS_UNDEFINED,
                             800, 600,
-                            SDL_WINDOW_SHOWN);
+                            SDL_WINDOW_SHOWN | SDL_WINDOW_ALWAYS_ON_TOP);
     if (!window) {
         fprintf(stderr, "Window creation failed: %s\n", SDL_GetError());
         SDL_Quit();
