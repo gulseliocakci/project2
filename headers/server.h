@@ -4,6 +4,7 @@
 #include "map.h" // Shared structures like Coord
 #include "drone.h" // Drone yapısı burada tanımlanmıştır
 #include "mission.h"
+#include "coord.h"
 #include "list.h"
 #include <time.h>
 #include <pthread.h>
@@ -23,5 +24,10 @@ void broadcast_to_drones(const char* message);
 void handle_disconnected_drone(int disconnected_drone_id);
 void* handle_drone(void* arg);
 void start_drone_server(void);
+void signal_handler(int signum) ; 
+
+Coord get_mission_target(const Mission* mission);
+void set_mission_target(Mission* mission, Coord coord);
+
 
 #endif
