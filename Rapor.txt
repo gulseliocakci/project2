@@ -1,77 +1,101 @@
-Emergency Drone Coordination System – Genel Proje Özeti
-
+Emergency Drone Coordination System Proje Raporu
 1. Proje Amacı ve Kapsamı
-Bu proje, afet senaryolarında insansız hava araçlarının (drone) merkezi bir sunucu ile koordineli olarak “hayatta kalanları” bulup kurtarmasını simüle eden bir istemci-sunucu (client-server) sistemdir.
-Dronelar ve hayatta kalanlar harita üzerinde hareket eder; iletişim ve görev atamaları gerçek zamanlı olarak socket ve çoklu thread kullanılarak gerçekleştirilir.
+Bu proje, afet senaryolarında insansız hava araçlarının (drone) merkezi bir sunucu ile koordineli olarak "hayatta kalanları" bulup kurtarmasını simüle eden bir istemci-sunucu (client-server) sistemdir. Dronelar, harita üzerinde belirli rotalarda hareket ederek, görevleri tamamlamak amacıyla “survivor” adı verilen yardım bekleyen kişilere ulaşır.
+
+1.1. Amaç
+Projenin temel amacı, afet durumlarında drone'ların verimli bir şekilde koordinasyon içinde çalışarak, hayatta kalanlara hızlı bir şekilde ulaşmasını simüle etmektir. Bu bağlamda, gerçek zamanlı görev atamaları ve hareket planlaması yaparak, birden fazla drone’un eşzamanlı çalıştığı bir ortamda kaynak verimliliği ve hata toleransı sağlanmaktadır.
+
+1.2. Kapsam
+Sunucu-Sistem İletişimi: Sunucu, tüm drone'ların koordinasyonunu yönetir ve görev atar.
+
+Görev ve Hedef Belirleme: Her drone, aldığı görevler doğrultusunda harita üzerinde hedeflere yönlendirilir.
+
+Simülasyon: Gerçek zamanlı olarak drone hareketleri, görev atamaları ve survivor yerleri görselleştirilir.
 
 2. Temel Bileşenler
+2.1. Sunucu (Server)
+Çoklu Bağlantı Yönetimi: Sunucu, birden fazla drone ile eş zamanlı olarak iletişim kurar. Her bir drone için ayrı bir thread oluşturularak paralel görev işlemleri gerçekleştirilir.
 
-Sunucu (Server)
-- Çoklu drone bağlantısı kabul eder ve her bir drone için ayrı thread açar.
-- Aktif dronelar ve yardıma muhtaç kişileri thread-safe listelerde tutar.
-- Bağlantısı kopan drone’ların görevlerini başka dronelara devreder.
-- AI Controller ile en uygun drone’u en eski yardım bekleyen survivora atar.
+Aktif Drone ve Survivor Takibi: Sunucu, her bir drone’un durumunu izler ve görev atamaları yapar. Survivor’lar da harita üzerinde dinamik olarak güncellenir.
 
-Drone (İstemci)
-- Sunucuya TCP üzerinden bağlanır, düzenli olarak konum ve durum bilgisi yollar.
-- Sunucudan gelen görevleri alır ve belirtilen koordinata hareket eder.
-- Görev tamamlandığında durumu tekrar sunucuya bildirir.
+Görev Devrimi: Bağlantısı kopan bir drone’un görevi, başka bir drone’a atanır ve AI Controller tarafından bu işlem yönetilir.
 
-Simülasyon & Görselleştirme
-- controller.c ve view.c dosyalarında SDL kullanılarak harita, drone ve survivor hareketleri gerçek zamanlı görselleştirilir.
-- Her drone ve survivor ayrı thread ile yönetilir.
+2.2. Drone (İstemci)
+TCP Bağlantısı: Drone, sunucuya bağlanarak sürekli olarak konum ve durum bilgisi gönderir.
 
-Veri Yapıları & Senkronizasyon
-- list.c/h: Survivor ve drone nesneleri, mutex ile korunan dinamik listelerde tutulur.
-- Thread güvenliği için tüm ekleme/çıkarma işlemleri mutex ile korunur.
+Görev Alımı ve Yönlendirme: Sunucudan aldığı görev doğrultusunda belirtilen hedefe yönelir ve görev tamamlandığında durumu sunucuya bildirir.
 
-3. Koddan Örnekler & Çalışma Mantığı
+Hareket Planlaması: Drone, hedef koordinatlarına ulaşırken en kısa ve güvenli rotayı izler.
 
-Sunucuya Bağlanan Drone (drone_client.c)
-int sock = socket(AF_INET, SOCK_STREAM, 0);
-connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr));
-while (1) {
-    DroneStatus status = {.x = 0, .y = 0, .status = IDLE};
-    send(sock, &status, sizeof(status), 0);
-    Coord target;
-    recv(sock, &target, sizeof(target), 0);
-    // hedefe yönelme mantığı burada...
-    sleep(1);
-}
+2.3. Simülasyon & Görselleştirme
+SDL Kullanımı: controller.c ve view.c dosyalarındaki SDL kütüphanesi ile harita ve hareketler gerçek zamanlı görselleştirilir. Her drone ve survivor için ayrı bir thread ile işlemler yönetilir.
 
-Sunucu: Her Drone İçin Thread Açma & Bağlantı Yönetimi (server.c)
-while (1) {
-    int* client_socket = malloc(sizeof(int));
-    *client_socket = accept(server_socket, (struct sockaddr*)&client_addr, &client_len);
-    pthread_t thread_id;
-    pthread_create(&thread_id, NULL, handle_drone, (void*)client_socket);
-    pthread_detach(thread_id);
-}
+Dinamik Harita Güncelleme: Harita üzerinde drone’lar ve survivor'ların hareketleri anlık olarak güncellenir.
 
-AI Controller: Görev Atama ve Yeniden Atama
-// Bağlantısı kopan drone'un görevi başka idle drone'a atanır
-void handle_disconnected_drone(int disconnected_drone_id) {
-    // ...mission reassignment...
-}
+2.4. Veri Yapıları & Senkronizasyon
+Thread-Safe Listeler: Survivor ve drone nesneleri, list.c/h dosyasında tanımlanan dinamik listelerde tutulur. Bu listelere veri ekleme ve çıkarma işlemleri mutex kullanılarak yapılır. Bu, birden fazla thread’in aynı anda bu verilere erişmesini engeller ve veri tutarlılığını sağlar.
 
-Simülasyonun Başlatılması (controller.c)
-survivors = create_list(sizeof(Survivor), 1000);
-drones = create_list(sizeof(Drone), 100);
-initialize_drones();
-pthread_create(&survivor_thread, NULL, survivor_generator, NULL);
-pthread_create(&ai_thread, NULL, ai_controller, NULL);
-// SDL ile görselleştirme başlatılır
+Veri Güncellemeleri: Drone ve survivor bilgileri, çoklu thread erişimine açık olduğundan, her ekleme ve çıkarma işlemi mutex ile korunur.
 
-4. Test ve Performans
-- drone_simulation.c dosyasındaki kodlarla çoklu drone ile yük testi yapılır, başarılı/başarısız bağlantılar ve mesaj sayısı raporlanır.
-- Thread güvenliği için Valgrind gibi araçlarla test yapılmalı.
-- Performans analizi: tamamlanan görevler, bağlantı süreleri ve drone verimliliği.
+3. Tasarım Tercihleri (Design Choices)
+3.1. İstemci-Sunucu Mimarisinin Seçimi
+Proje, afet senaryolarında çoklu drone’un koordineli bir şekilde çalışabilmesi için istemci-sunucu (client-server) mimarisi üzerine inşa edilmiştir. Bu mimari, merkezi bir sunucunun tüm drone'lar ile iletişim kurarak görev dağılımı yapmasına olanak tanır.
 
-5. Geliştirilebilir Noktalar
-- Bağlantı kopmaları sonrası görev devri ve hata toleransı daha da geliştirilebilir.
-- İleri seviyede web tabanlı veya mobil görselleştirme eklenebilir.
-- Görev önceliği (ör. kritik durumdaki survivorları önceleme) gibi algoritmik geliştirmeler yapılabilir.
+Neden İstemci-Sunucu? Bu yapı, ağ üzerinde tüm droneların verilerini merkezi bir sunucuda toplar ve gerektiğinde her drone'a görev atar. İstemci-sunucu yapısı, drone’ların birbirinden bağımsız çalışabilmesini sağlarken, aynı zamanda merkezi bir kontrol noktası sunar.
 
-6. Sonuç
-Proje, thread-safe veri yapıları ve socket tabanlı istemci-sunucu mimarisiyle modern, ölçeklenebilir bir kurtarma drone yönetim sistemi örneği sunar.
-Harita üzerinde canlı görselleştirme, gerçek zamanlı görev atama ve yük testleriyle hem akademik hem de gerçek dünya problemlerine uygun bir modeldir.
+3.2. Çoklu Thread Kullanımı
+Her bir drone, ayrı bir thread aracılığıyla çalışır. Sunucu, her bir drone’a görev gönderirken, her drone kendi thread'inde bağımsız olarak hareket eder. Bu tasarım, her drone’un eş zamanlı ve bağımsız olarak çalışabilmesini sağlar, bu da performansı artırır ve daha gerçekçi bir simülasyon ortamı yaratır.
+
+Neden Çoklu Thread? Bu yöntem, aynı anda birden fazla drone’a görev atamayı mümkün kılar ve her drone’un işlemi, diğer drone’ların işlemlerini etkilemeden bağımsız bir şekilde yürütülür.
+
+3.3. SDL Kullanarak Görselleştirme
+Harita ve hareketlerin görselleştirilmesi için SDL (Simple DirectMedia Layer) kütüphanesi kullanılmıştır. Bu kütüphane, grafikler ve animasyonlar için düşük seviyeli API’ler sunarak, gerçek zamanlı olarak harita üzerinde drone ve survivor’ların konumlarını güncellemeye olanak tanır.
+
+Neden SDL? SDL, düşük seviyeli grafik işlemleri için oldukça verimli bir kütüphanedir ve simülasyonların hızlı bir şekilde görselleştirilmesine olanak verir. Ayrıca platformlar arası uyumluluk sağlar.
+
+4. Senkronizasyon Stratejisi (Synchronization Strategy)
+4.1. Thread-Safe Veri Yapıları
+Proje, çoklu thread ile çalışan bir sistem olduğu için, veri güvenliği için mutex (karşılıklı dışlama) kullanılarak veri yapılarına erişim kontrolü sağlanmıştır. Sunucu tarafındaki drone ve survivor verileri, thread’ler arasında güvenli bir şekilde paylaşılabilmesi için mutex ile korunmaktadır.
+
+Thread-Safe Listeler: Survivor ve drone nesneleri, dinamik listelerde tutulur. Bu listelere veri ekleme ve çıkarma işlemleri mutex kullanılarak yapılır. Bu, birden fazla thread’in aynı anda bu verilere erişmesini engeller ve veri tutarlılığını sağlar.
+
+Mutex Kullanımı: Sunucu ve drone arasındaki görev aktarımı ve veri güncellemeleri esnasında mutex kullanımı, veri bütünlüğünün bozulmamasını sağlar.
+
+4.2. Eşzamanlı Görev Yönetimi
+Bağlantı Kopması Durumu: Bağlantısı kopan bir drone’un görevi, başka bir idle drone’a atanır. Bu işlem, sunucuda merkezi olarak yönetilir ve bağlantısı kopan drone’un görevi hızlı bir şekilde yeniden atanır. AI Controller, uygun drone'u seçmek için belirli algoritmalar kullanır.
+
+Senkronizasyon Mekanizması: Drone’lar arasındaki görev atamaları ve veri güncellemeleri, sunucu tarafından yönetilir ve her bir drone’a ait işlem aynı anda başlatılır, böylece zaman senkronizasyonu sağlanır.
+
+5. Performans Analizi (Performance Analysis)
+5.1. Yük Testi
+Proje, çoklu drone bağlantısını simüle edebilmek için drone_simulation.c dosyası kullanılarak yük testleri yapılmıştır. Bu testlerde, farklı sayıda drone ile bağlantı kurulmuş ve her drone’a görev atanarak bağlantı süreleri ve mesajlaşma hızları ölçülmüştür.
+
+Bağlantı Başarısı: Başarılı bağlantıların oranı ölçülerek, ağ gecikmesi ve bağlantı kaybı durumu raporlanmıştır. Performans testleri sırasında, her bir drone’un bağlantısı 1 saniyelik periyotlarla izlenmiş ve başarı oranları kaydedilmiştir.
+
+5.2. Görev Tamamlama Süreleri
+Her drone’un aldığı görevleri ne kadar sürede tamamladığı, sistemin genel verimliliği açısından kritik bir metrik olarak ölçülmüştür. Drone’lar arasındaki görev dağılımı ve hedeflere yönelme süreleri izlenmiş ve optimize edilmiştir.
+
+Ölçüm: Görev tamamlama süreleri, her bir drone için görevin başlangıcından bitişine kadar geçen süreyi hesaplayarak değerlendirilmiştir. Bu veriler, sistemin ne kadar verimli çalıştığını gösterir.
+
+5.3. Bağlantı Süreleri ve Verimlilik
+Bağlantı süreleri, drone’lar ile sunucu arasındaki iletişim hızını ölçmek için izlenmiştir. Bu testler, sistemin genel yanıt süresini ölçer ve ağ gecikmesi veya performans darboğazlarını tespit etmek için kullanılır.
+
+Ağ Gecikmesi: Drone’lar ile sunucu arasındaki iletişimde oluşan gecikmeler raporlanarak, ağ altyapısının verimliliği analiz edilmiştir.
+
+5.4. Bellek ve Kaynak Kullanımı
+Valgrind Kullanımı: Çoklu thread yönetimi ve veri yapılarına yapılan erişimlerin bellek sızıntılarına yol açıp açmadığı Valgrind gibi araçlarla test edilmiştir. Bu, yazılımın uzun süreli çalışmalarda stabil kalmasını sağlar.
+
+6. Geliştirilebilir Noktalar
+6.1. Bağlantı Kopması ve Görev Devri
+Bağlantı kopması durumlarında görev devri ve hata toleransı daha da geliştirilebilir. Örneğin, sunucu bağlantısı koptuğunda, drone'lar arasında görev devri daha hızlı ve verimli yapılabilir.
+
+6.2. Web ve Mobil Görselleştirme
+Web Tabanlı Görselleştirme: Harita üzerindeki drone ve survivor hareketleri, web tabanlı bir platform üzerinden izlenebilir. Bu, operatörlerin gerçek zamanlı müdahale yapabilmesini sağlar.
+
+Mobil Uygulama: Drone sisteminin kontrolü ve harita görselleştirmesi, mobil platformlara da taşınabilir.
+
+6.3. Görev Önceliği ve Algoritmalar
+Görev Önceliği: Kritik durumdaki survivor'lara öncelik verilmesi gibi yeni algoritmalar eklenebilir. AI Controller, bu önceliği göz önünde bulundurarak görev atamalarını dinamik olarak yapabilir.
+
+7. Sonuç
+Proje, thread-safe veri yapıları ve socket tabanlı istemci-sunucu mimarisiyle modern, ölçeklenebilir bir kurtarma drone yönetim sistemi örneği sunmaktadır. Gerçek zamanlı görev atamaları, yük testleri ve dinamik harita güncellemeleri ile hem akademik hem de gerçek dünya senaryolarına uyarlanabilir bir modeldir. Bu sistem, afet senaryolarında drone’ların verimli ve hızlı bir şekilde görev yapabilmesini sağlamak için önemli bir adım olarak değerlendirilebilir.
